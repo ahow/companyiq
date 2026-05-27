@@ -5,55 +5,54 @@ import type { Framework, TrustedSource } from "../../shared/schema.js";
 
 const MAX_DOCS_RETURNED = 60;
 const PRE_GATE_CAP = 120;
-const SERPER_TIMEOUT = 15000;
+const SEARCH_TIMEOUT = 15000;
 
-// ─── Serper API Key Pool ─────────────────────────────────────────────────────
+// ─── SerpAPI Key ────────────────────────────────────────────────────────────
 
-function getSerperKey(): string {
-  // Support key rotation: SERPER_API_KEY_1, SERPER_API_KEY_2, etc.
-  const keys: string[] = [];
-  if (process.env.SERPER_API_KEY) keys.push(process.env.SERPER_API_KEY);
-  for (let i = 1; i <= 10; i++) {
-    const key = process.env[`SERPER_API_KEY_${i}`];
-    if (key) keys.push(key);
-  }
-  if (keys.length === 0) throw new Error("No SERPER_API_KEY configured");
-  return keys[Math.floor(Math.random() * keys.length)];
+function getSerpApiKey(): string {
+  // Support SERP_API_KEY (SerpAPI) or SERPER_API_KEY (Serper.dev) or fallback
+  const key = process.env.SERP_API_KEY || process.env.SERPER_API_KEY;
+  if (!key) throw new Error("No SERP_API_KEY or SERPER_API_KEY configured");
+  return key;
 }
 
-// ─── Serper Search ───────────────────────────────────────────────────────────
+// ─── Search Provider ────────────────────────────────────────────────────────
 
-interface SerperResult {
+interface SearchResult {
   title: string;
   link: string;
   snippet: string;
   position?: number;
 }
 
-async function serperSearch(
+async function webSearch(
   query: string,
   opts: { num?: number; tbs?: string } = {}
-): Promise<SerperResult[]> {
+): Promise<SearchResult[]> {
   try {
-    const body: any = { q: query, num: opts.num || 10 };
-    if (opts.tbs) body.tbs = opts.tbs;
+    const apiKey = getSerpApiKey();
+    const params: any = {
+      q: query,
+      api_key: apiKey,
+      engine: "google",
+      num: opts.num || 10,
+    };
+    if (opts.tbs) params.tbs = opts.tbs;
 
-    const response = await axios.post("https://google.serper.dev/search", body, {
-      headers: {
-        "X-API-KEY": getSerperKey(),
-        "Content-Type": "application/json",
-      },
-      timeout: SERPER_TIMEOUT,
+    const response = await axios.get("https://serpapi.com/search.json", {
+      params,
+      timeout: SEARCH_TIMEOUT,
     });
 
-    return (response.data.organic || []).map((r: any) => ({
+    const organic = response.data.organic_results || [];
+    return organic.map((r: any, idx: number) => ({
       title: r.title || "",
       link: r.link || "",
       snippet: r.snippet || "",
-      position: r.position,
+      position: r.position || idx + 1,
     }));
   } catch (error: any) {
-    console.warn(`[Discovery] Serper search failed for "${query}": ${error.message}`);
+    console.warn(`[Discovery] Search failed for "${query}": ${error.message}`);
     return [];
   }
 }
@@ -268,7 +267,7 @@ export async function searchCompanyDocuments(opts: {
   const seenUrls = new Set<string>();
   const laneCounts: Record<string, number> = {};
 
-  function addCandidate(result: SerperResult, lane: string) {
+  function addCandidate(result: SearchResult, lane: string) {
     if (seenUrls.has(result.link)) return;
     seenUrls.add(result.link);
     const priority = calculatePriority(result.link, result.title, companyDomain || null, framework);
@@ -303,12 +302,12 @@ export async function searchCompanyDocuments(opts: {
   console.log(`[${companyName}] Running general search lane`);
   const generalQueries = buildGeneralQueries(companyName, framework);
   for (const query of generalQueries) {
-    const results = await serperSearch(query, { num: 10, tbs: "qdr:y2" });
+    const results = await webSearch(query, { num: 10, tbs: "qdr:y2" });
     for (const r of results) addCandidate(r, "general");
 
     // If too few results with recency filter, retry without
     if (results.length < 3) {
-      const unfiltered = await serperSearch(query, { num: 10 });
+      const unfiltered = await webSearch(query, { num: 10 });
       for (const r of unfiltered) addCandidate(r, "general-unfiltered");
     }
   }
@@ -318,7 +317,7 @@ export async function searchCompanyDocuments(opts: {
     console.log(`[${companyName}] Running domain-anchored search lane`);
     const domainQueries = buildDomainQueries(companyName, companyDomain, framework);
     for (const query of domainQueries) {
-      const results = await serperSearch(query, { num: 10 });
+      const results = await webSearch(query, { num: 10 });
       for (const r of results) addCandidate(r, "domain");
     }
   }
@@ -328,7 +327,7 @@ export async function searchCompanyDocuments(opts: {
     console.log(`[${companyName}] Running trusted source search lane`);
     const tsQueries = buildTrustedSourceQueries(companyName, trustedSources);
     for (const query of tsQueries.slice(0, 5)) {
-      const results = await serperSearch(query, { num: 5 });
+      const results = await webSearch(query, { num: 5 });
       for (const r of results) addCandidate(r, "trusted");
     }
   }
@@ -338,7 +337,7 @@ export async function searchCompanyDocuments(opts: {
   if (cjkQueries.length > 0) {
     console.log(`[${companyName}] Running CJK search lane`);
     for (const query of cjkQueries) {
-      const results = await serperSearch(query, { num: 10 });
+      const results = await webSearch(query, { num: 10 });
       for (const r of results) addCandidate(r, "cjk");
     }
   }
