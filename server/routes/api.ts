@@ -35,6 +35,22 @@ router.get("/version", (req: Request, res: Response) => {
   res.json({ version: "2.0.0", buildDate: new Date().toISOString() });
 });
 
+// Debug endpoint to check job queue status
+router.get("/debug/jobs", async (req: Request, res: Response) => {
+  try {
+    const { db } = await import("../db.js");
+    const { sql } = await import("drizzle-orm");
+    const counts = await db.execute(sql`
+      SELECT status, COUNT(*) as count FROM analysis_jobs GROUP BY status
+    `);
+    const total = await db.execute(sql`SELECT COUNT(*) as count FROM analysis_jobs`);
+    const sample = await db.execute(sql`SELECT id, company_id, status, worker_id, error, attempts FROM analysis_jobs LIMIT 5`);
+    res.json({ statusCounts: counts.rows, totalJobs: total.rows[0], sampleJobs: sample.rows });
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
 // ─── Companies CRUD ──────────────────────────────────────────────────────────
 
 router.get("/companies", async (req: Request, res: Response) => {

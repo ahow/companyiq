@@ -170,9 +170,14 @@ async function processNextJob(): Promise<boolean> {
 
 async function workerPollLoop() {
   console.log(`[${WORKER_ID}] Starting embedded worker (concurrency: ${MAX_CONCURRENT})`);
+  let pollCount = 0;
 
   while (workerRunning) {
     try {
+      pollCount++;
+      if (pollCount % 12 === 1) {
+        console.log(`[${WORKER_ID}] Poll #${pollCount}, activeJobs=${activeJobs}, workerRunning=${workerRunning}`);
+      }
       const claimed = await processNextJob();
       if (!claimed) {
         await new Promise((resolve) => setTimeout(resolve, POLL_INTERVAL));
@@ -181,6 +186,7 @@ async function workerPollLoop() {
       }
     } catch (error: any) {
       console.error(`[${WORKER_ID}] Poll error: ${error.message}`);
+      console.error(`[${WORKER_ID}] Poll error stack: ${error.stack}`);
       await new Promise((resolve) => setTimeout(resolve, POLL_INTERVAL * 2));
     }
   }
