@@ -1,20 +1,25 @@
 FROM node:20-alpine AS base
 
+RUN npm install -g pnpm
+
 WORKDIR /app
 
-# Install dependencies
+# Install root dependencies
 COPY package.json pnpm-lock.yaml* ./
-COPY client/package.json ./client/
-RUN npm install -g pnpm && pnpm install --frozen-lockfile || pnpm install
+RUN pnpm install --no-frozen-lockfile
 
-# Copy source
+# Install client dependencies
+COPY client/package.json ./client/
+RUN cd client && pnpm install --no-frozen-lockfile
+
+# Copy all source
 COPY . .
 
-# Build client
-RUN cd client && pnpm install && pnpm run build
-
-# Build server
+# Build server (TypeScript)
 RUN pnpm run build:server
+
+# Build client (Vite)
+RUN cd client && pnpm run build
 
 # Production stage
 FROM node:20-alpine AS production
