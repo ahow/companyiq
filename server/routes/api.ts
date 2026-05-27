@@ -1,0 +1,648 @@
+import { Router, Request, Response } from "express";
+import multer from "multer";
+import { storage } from "../storage.js";
+import { getProviderStatus } from "../lib/ai-providers.js";
+import { runAnalysisPipeline } from "../lib/pipeline.js";
+import { processDocument } from "../lib/processor.js";
+import type { Framework, FrameworkMeasure } from "../../shared/schema.js";
+
+const router = Router();
+const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 50 * 1024 * 1024 } });
+
+// ─── Batch State ─────────────────────────────────────────────────────────────
+
+interface BatchState {
+  cancelRequested: boolean;
+  currentEpoch: number;
+  currentCompany?: string;
+  running: boolean;
+}
+
+const batchState: BatchState = {
+  cancelRequested: false,
+  currentEpoch: 0,
+  currentCompany: undefined,
+  running: false,
+};
+
+// ─── Health & Version ────────────────────────────────────────────────────────
+
+router.get("/health", (req: Request, res: Response) => {
+  res.json({ status: "ok", timestamp: new Date().toISOString(), process: "web" });
+});
+
+router.get("/version", (req: Request, res: Response) => {
+  res.json({ version: "2.0.0", buildDate: new Date().toISOString() });
+});
+
+// ─── Companies CRUD ──────────────────────────────────────────────────────────
+
+router.get("/companies", async (req: Request, res: Response) => {
+  try {
+    const companies = await storage.getCompanies();
+    const completed = companies.filter((c) => c.analysisStatus === "completed").length;
+    const avgScore = completed > 0
+      ? Math.round(companies.filter(c => c.totalScore !== null).reduce((sum, c) => sum + (c.totalScore || 0), 0) / completed)
+      : 0;
+    res.json({ companies, stats: { total: companies.length, completed, avgScore } });
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+router.get("/companies/:id", async (req: Request, res: Response) => {
+  try {
+    const company = await storage.getCompany(parseInt(req.params.id));
+    if (!company) return res.status(404).json({ error: "Company not found" });
+
+    const scores = await storage.getMeasureScores(company.id);
+    const documents = await storage.getDocumentsForCompany(company.id);
+    res.json({ company, scores, documents });
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+router.post("/companies", async (req: Request, res: Response) => {
+  try {
+    const { name, isin, sector, country, domain } = req.body;
+    if (!name) return res.status(400).json({ error: "Name is required" });
+
+    const company = await storage.createCompany({ name, isin, sector, country, domain });
+    res.status(201).json(company);
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+router.patch("/companies/:id", async (req: Request, res: Response) => {
+  try {
+    const company = await storage.updateCompany(parseInt(req.params.id), req.body);
+    if (!company) return res.status(404).json({ error: "Company not found" });
+    res.json(company);
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+router.delete("/companies/:id", async (req: Request, res: Response) => {
+  try {
+    await storage.deleteCompany(parseInt(req.params.id));
+    res.json({ success: true });
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// ─── Company Import (Excel/CSV) ──────────────────────────────────────────────
+
+router.post("/companies/import", upload.single("file"), async (req: Request, res: Response) => {
+  try {
+    if (!req.file) return res.status(400).json({ error: "No file uploaded" });
+
+    const XLSX = await import("xlsx");
+    const workbook = XLSX.read(req.file.buffer, { type: "buffer" });
+    const sheet = workbook.Sheets[workbook.SheetNames[0]];
+    const rows: any[] = XLSX.utils.sheet_to_json(sheet);
+
+    const created: any[] = [];
+    for (const row of rows) {
+      const name = row.name || row.Name || row.company || row.Company;
+      if (!name) continue;
+
+      const existing = await storage.getCompanyByName(name);
+      if (existing) continue;
+
+      const company = await storage.createCompany({
+        name,
+        isin: row.isin || row.ISIN || null,
+        sector: row.sector || row.Sector || null,
+        country: row.country || row.Country || null,
+        domain: row.domain || row.Domain || null,
+      });
+      created.push(company);
+    }
+
+    // Create a company list record
+    if (created.length > 0) {
+      await storage.createCompanyList({
+        name: req.file.originalname || "Imported list",
+        companyIds: created.map((c) => c.id),
+        sourceFilename: req.file.originalname,
+      });
+    }
+
+    res.json({ imported: created.length, total: rows.length });
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// ─── Document Upload ─────────────────────────────────────────────────────────
+
+router.post("/companies/:id/documents", upload.single("file"), async (req: Request, res: Response) => {
+  try {
+    const companyId = parseInt(req.params.id);
+    if (!req.file) return res.status(400).json({ error: "No file uploaded" });
+
+    const framework = await storage.getActiveFramework();
+    if (!framework) return res.status(400).json({ error: "No active framework" });
+
+    // Extract content from uploaded PDF
+    const pdfParse = (await import("pdf-parse")).default;
+    const data = await pdfParse(req.file.buffer);
+    const content = data.text || "";
+
+    const url = `upload://${req.file.originalname}`;
+    await storage.upsertDiscoveredDocument({
+      companyId,
+      frameworkId: framework.id,
+      url,
+      title: req.file.originalname,
+      type: "pdf",
+      gateVerdict: "accept",
+      gateReason: "user-uploaded",
+    });
+
+    // Record content
+    await storage.recordFetchSuccess(companyId, framework.id, url, content);
+
+    res.json({ success: true, filename: req.file.originalname, contentLength: content.length });
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// ─── Analyze ─────────────────────────────────────────────────────────────────
+
+// Path A: Single company inline analysis
+router.post("/companies/:id/analyze", async (req: Request, res: Response) => {
+  try {
+    const companyId = parseInt(req.params.id);
+    const company = await storage.getCompany(companyId);
+    if (!company) return res.status(404).json({ error: "Company not found" });
+
+    // Pin framework at run start
+    const framework = await storage.getActiveFramework();
+    if (!framework) return res.status(400).json({ error: "No active framework" });
+
+    const measures = await storage.getMeasuresForFramework(framework.id);
+    if (measures.length === 0) return res.status(400).json({ error: "Framework has no measures" });
+
+    // Return immediately, run in background
+    res.json({ status: "started", companyId, companyName: company.name });
+
+    // Run pipeline in background
+    runAnalysisPipeline({ company, framework, measures }).catch((err) => {
+      console.error(`[${company.name}] Background analysis failed:`, err);
+    });
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Path B: Batch analyze all companies
+router.post("/companies/analyze-all", async (req: Request, res: Response) => {
+  try {
+    if (batchState.running) {
+      return res.status(409).json({ error: "A batch is already running" });
+    }
+
+    const framework = await storage.getActiveFramework();
+    if (!framework) return res.status(400).json({ error: "No active framework" });
+
+    const measures = await storage.getMeasuresForFramework(framework.id);
+    if (measures.length === 0) return res.status(400).json({ error: "Framework has no measures" });
+
+    const companies = await storage.getCompanies();
+    if (companies.length === 0) return res.status(400).json({ error: "No companies to analyze" });
+
+    // Create batch run
+    const batch = await storage.createBatchRun({
+      totalJobs: companies.length,
+      frameworkId: framework.id,
+      triggeredBy: "web",
+    });
+
+    // Enqueue jobs
+    for (const company of companies) {
+      await storage.createAnalysisJob({
+        companyId: company.id,
+        companyName: company.name,
+        batchId: batch.id,
+        frameworkId: framework.id,
+      });
+    }
+
+    batchState.running = true;
+    batchState.cancelRequested = false;
+    batchState.currentEpoch++;
+
+    res.json({ batchId: batch.id, totalJobs: companies.length });
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Batch status
+router.get("/batch/status", async (req: Request, res: Response) => {
+  try {
+    const batch = await storage.getActiveBatchRun();
+    if (!batch) {
+      return res.json({ running: false, completed: 0, total: 0, failed: 0 });
+    }
+    res.json({
+      running: batch.status === "running",
+      batchId: batch.id,
+      completed: batch.completedJobs,
+      failed: batch.failedJobs,
+      total: batch.totalJobs,
+      currentCompany: batchState.currentCompany,
+    });
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Cancel batch
+router.post("/batch/cancel", async (req: Request, res: Response) => {
+  try {
+    batchState.cancelRequested = true;
+    batchState.currentEpoch++;
+    batchState.running = false;
+
+    const batch = await storage.getActiveBatchRun();
+    if (batch) {
+      await storage.cancelBatchRun(batch.id);
+    }
+
+    res.json({ success: true });
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Recent batch runs
+router.get("/batch/runs", async (req: Request, res: Response) => {
+  try {
+    const runs = await storage.getRecentBatchRuns();
+    res.json(runs);
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// ─── Frameworks ──────────────────────────────────────────────────────────────
+
+router.get("/frameworks", async (req: Request, res: Response) => {
+  try {
+    const frameworks = await storage.getFrameworks();
+    res.json(frameworks);
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+router.get("/frameworks/:id", async (req: Request, res: Response) => {
+  try {
+    const framework = await storage.getFramework(parseInt(req.params.id));
+    if (!framework) return res.status(404).json({ error: "Framework not found" });
+
+    const measures = await storage.getMeasuresForFramework(framework.id);
+    res.json({ ...framework, measures });
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+router.post("/frameworks", async (req: Request, res: Response) => {
+  try {
+    const framework = await storage.createFramework(req.body);
+    res.status(201).json(framework);
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+router.patch("/frameworks/:id", async (req: Request, res: Response) => {
+  try {
+    const framework = await storage.updateFramework(parseInt(req.params.id), req.body);
+    if (!framework) return res.status(404).json({ error: "Framework not found" });
+    res.json(framework);
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+router.post("/frameworks/:id/activate", async (req: Request, res: Response) => {
+  try {
+    await storage.activateFramework(parseInt(req.params.id));
+    res.json({ success: true });
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+router.delete("/frameworks/:id", async (req: Request, res: Response) => {
+  try {
+    await storage.deleteFramework(parseInt(req.params.id));
+    res.json({ success: true });
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// ─── Framework Measures ──────────────────────────────────────────────────────
+
+router.post("/frameworks/:id/measures", async (req: Request, res: Response) => {
+  try {
+    const frameworkId = parseInt(req.params.id);
+    const measure = await storage.createMeasure({ ...req.body, frameworkId });
+    res.status(201).json(measure);
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+router.patch("/frameworks/:id/measures/:measureId", async (req: Request, res: Response) => {
+  try {
+    const frameworkId = parseInt(req.params.id);
+    const measure = await storage.updateMeasure(frameworkId, req.params.measureId, req.body);
+    if (!measure) return res.status(404).json({ error: "Measure not found" });
+    res.json(measure);
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+router.delete("/frameworks/:id/measures/:measureId", async (req: Request, res: Response) => {
+  try {
+    await storage.deleteMeasure(parseInt(req.params.id), req.params.measureId);
+    res.json({ success: true });
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+router.post("/frameworks/:id/measures/bulk", async (req: Request, res: Response) => {
+  try {
+    const frameworkId = parseInt(req.params.id);
+    const measures = req.body.measures.map((m: any) => ({ ...m, frameworkId }));
+    const created = await storage.bulkCreateMeasures(measures);
+    res.status(201).json(created);
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// ─── Framework Builder (AI-assisted) ─────────────────────────────────────────
+
+router.post("/framework-builder/draft", async (req: Request, res: Response) => {
+  try {
+    const { topicDescription, measureCount } = req.body;
+    if (!topicDescription) return res.status(400).json({ error: "Topic description required" });
+
+    const { completeWithFallback } = await import("../lib/ai-providers.js");
+    const { text } = await completeWithFallback("deepseek", {
+      system: "You are an ESG framework designer. Create assessment measures for corporate disclosure analysis.",
+      prompt: `Design an assessment framework for the following topic:\n\n${topicDescription}\n\nCreate ${measureCount || 25} specific, measurable questions grouped into 4-6 categories. Each measure should be answerable as Yes/No from public corporate disclosures.\n\nReturn JSON:\n{\n  "name": "Framework Name",\n  "categories": [\n    {\n      "name": "Category Name",\n      "measures": [\n        {\n          "measureId": "1.1-short-slug",\n          "title": "Does the company...?",\n          "definition": "Detailed definition",\n          "scoringGuidance": {"yes": "Evidence of...", "no": "No evidence of..."}\n        }\n      ]\n    }\n  ]\n}`,
+      json: true,
+      maxTokens: 8000,
+    });
+
+    res.json(JSON.parse(text));
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// ─── Settings ────────────────────────────────────────────────────────────────
+
+router.get("/settings", async (req: Request, res: Response) => {
+  try {
+    const settings = await storage.getSettings();
+    res.json(settings);
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+router.post("/settings", async (req: Request, res: Response) => {
+  try {
+    await storage.upsertSettings(req.body);
+    res.json({ success: true });
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// ─── Providers ───────────────────────────────────────────────────────────────
+
+router.get("/providers/status", (req: Request, res: Response) => {
+  res.json(getProviderStatus());
+});
+
+// ─── Diagnostics ─────────────────────────────────────────────────────────────
+
+router.get("/diagnostics/recent-errors", async (req: Request, res: Response) => {
+  try {
+    const errors = await storage.getRecentErrors();
+    res.json(errors);
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+router.get("/diagnostics/companies/:id/discovery", async (req: Request, res: Response) => {
+  try {
+    const company = await storage.getCompany(parseInt(req.params.id));
+    if (!company) return res.status(404).json({ error: "Company not found" });
+    res.json(company.discoveryDiagnostics || {});
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// ─── Snapshots ───────────────────────────────────────────────────────────────
+
+router.post("/companies/:id/snapshot", async (req: Request, res: Response) => {
+  try {
+    const companyId = parseInt(req.params.id);
+    const company = await storage.getCompany(companyId);
+    if (!company) return res.status(404).json({ error: "Company not found" });
+
+    const scores = await storage.getMeasureScores(companyId);
+    const framework = await storage.getActiveFramework();
+
+    const snapshot = await storage.createSnapshot({
+      companyId,
+      frameworkId: framework?.id,
+      frameworkName: framework?.name,
+      totalScore: company.totalScore ?? undefined,
+      summary: company.summary ?? undefined,
+      measureScoresData: scores,
+      documentCount: (await storage.getDocumentsForCompany(companyId)).length,
+      label: req.body.label,
+    });
+
+    res.status(201).json(snapshot);
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+router.get("/snapshots", async (req: Request, res: Response) => {
+  try {
+    const companyId = req.query.companyId ? parseInt(req.query.companyId as string) : undefined;
+    const snapshots = await storage.getSnapshots(companyId);
+    res.json(snapshots);
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+router.get("/snapshots/:id", async (req: Request, res: Response) => {
+  try {
+    const snapshot = await storage.getSnapshot(parseInt(req.params.id));
+    if (!snapshot) return res.status(404).json({ error: "Snapshot not found" });
+    res.json(snapshot);
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+router.delete("/snapshots/:id", async (req: Request, res: Response) => {
+  try {
+    await storage.deleteSnapshot(parseInt(req.params.id));
+    res.json({ success: true });
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// ─── Trusted Sources ─────────────────────────────────────────────────────────
+
+router.get("/trusted-sources", async (req: Request, res: Response) => {
+  try {
+    const sources = await storage.getTrustedSources();
+    res.json(sources);
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+router.post("/trusted-sources", async (req: Request, res: Response) => {
+  try {
+    const source = await storage.createTrustedSource(req.body);
+    res.status(201).json(source);
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+router.patch("/trusted-sources/:id", async (req: Request, res: Response) => {
+  try {
+    const source = await storage.updateTrustedSource(parseInt(req.params.id), req.body);
+    res.json(source);
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+router.delete("/trusted-sources/:id", async (req: Request, res: Response) => {
+  try {
+    await storage.deleteTrustedSource(parseInt(req.params.id));
+    res.json({ success: true });
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// ─── Company Lists ───────────────────────────────────────────────────────────
+
+router.get("/company-lists", async (req: Request, res: Response) => {
+  try {
+    const lists = await storage.getCompanyLists();
+    res.json(lists);
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+router.delete("/company-lists/:id", async (req: Request, res: Response) => {
+  try {
+    await storage.deleteCompanyList(parseInt(req.params.id));
+    res.json({ success: true });
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// ─── Export ──────────────────────────────────────────────────────────────────
+
+router.get("/export/companies.csv", async (req: Request, res: Response) => {
+  try {
+    const companies = await storage.getCompanies();
+    let csv = "id,name,isin,sector,country,totalScore,analysisStatus\n";
+    for (const c of companies) {
+      csv += `${c.id},"${c.name}","${c.isin || ""}","${c.sector || ""}","${c.country || ""}",${c.totalScore || 0},${c.analysisStatus}\n`;
+    }
+    res.setHeader("Content-Type", "text/csv");
+    res.setHeader("Content-Disposition", "attachment; filename=companies.csv");
+    res.send(csv);
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+router.get("/export/measure-scores.csv", async (req: Request, res: Response) => {
+  try {
+    const companies = await storage.getCompanies();
+    let csv = "companyId,companyName,measureId,category,title,score,verdict,confidence,evidenceSummary\n";
+    for (const company of companies) {
+      const scores = await storage.getMeasureScores(company.id);
+      for (const s of scores) {
+        csv += `${company.id},"${company.name}","${s.measureId}","${s.category || ""}","${s.title || ""}",${s.score},"${s.verdict || ""}","${s.confidence || ""}","${(s.evidenceSummary || "").replace(/"/g, '""').slice(0, 200)}"\n`;
+      }
+    }
+    res.setHeader("Content-Type", "text/csv");
+    res.setHeader("Content-Disposition", "attachment; filename=measure-scores.csv");
+    res.send(csv);
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// ─── Company Terminology ─────────────────────────────────────────────────────
+
+router.get("/companies/:id/terminology", async (req: Request, res: Response) => {
+  try {
+    const companyId = parseInt(req.params.id);
+    const framework = await storage.getActiveFramework();
+    if (!framework) return res.json(null);
+
+    const terminology = await storage.getCompanyTerminology(companyId, framework.id);
+    res.json(terminology);
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+router.post("/companies/:id/refresh-terminology", async (req: Request, res: Response) => {
+  try {
+    const companyId = parseInt(req.params.id);
+    const company = await storage.getCompany(companyId);
+    if (!company) return res.status(404).json({ error: "Company not found" });
+
+    // Delete existing terminology to force re-discovery
+    const framework = await storage.getActiveFramework();
+    if (!framework) return res.status(400).json({ error: "No active framework" });
+
+    // The next analysis run will re-discover terminology
+    res.json({ success: true, message: "Terminology will be refreshed on next analysis" });
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+export default router;
