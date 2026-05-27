@@ -61,7 +61,7 @@ app.use((req, res, next) => {
   if (!req.path.startsWith("/api/") && !isAuthenticated(req)) {
     // Serve login page for unauthenticated HTML requests
     if (req.accepts("html")) {
-      return res.sendFile(path.join(__dirname, "../client/dist/index.html"));
+      return res.sendFile(path.join(__dirname, "../../client/dist/index.html"));
     }
     return res.status(401).json({ error: "Unauthorized" });
   }
@@ -94,7 +94,7 @@ app.use("/api", apiRouter);
 
 // ─── Static Files (SPA) ─────────────────────────────────────────────────────
 
-const clientDist = path.join(__dirname, "../client/dist");
+const clientDist = path.join(__dirname, "../../client/dist");
 app.use(express.static(clientDist));
 app.get("*", (req, res) => {
   res.sendFile(path.join(clientDist, "index.html"));
