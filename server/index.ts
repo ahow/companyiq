@@ -1,9 +1,12 @@
 import express from "express";
 import cors from "cors";
 import path from "path";
+import crypto from "crypto";
 import { fileURLToPath } from "url";
 import { runStartupMigrations } from "./db.js";
 import apiRouter from "./routes/api.js";
+import { storage } from "./storage.js";
+import { runAnalysisPipeline } from "./lib/pipeline.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -102,6 +105,89 @@ app.get("*", (req, res) => {
 
 // ─── Start Server ────────────────────────────────────────────────────────────
 
+// ─── Embedded Worker ────────────────────────────────────────────────────────
+
+const WORKER_ID = `worker-${crypto.randomUUID().slice(0, 8)}`;
+const POLL_INTERVAL = 5000;
+const MAX_CONCURRENT = parseInt(process.env.WORKER_CONCURRENCY || "2");
+let workerRunning = true;
+let activeJobs = 0;
+
+async function processNextJob(): Promise<boolean> {
+  if (activeJobs >= MAX_CONCURRENT) return false;
+
+  const job = await storage.claimJob(WORKER_ID);
+  if (!job) return false;
+
+  activeJobs++;
+  console.log(`[${WORKER_ID}] Claimed job ${job.id} for ${job.companyName} (attempt ${job.attempts})`);
+
+  try {
+    const company = await storage.getCompany(job.companyId);
+    if (!company) throw new Error("Company not found");
+
+    const framework = await storage.getFramework(job.frameworkId!);
+    if (!framework) throw new Error("Framework not found");
+
+    const measures = await storage.getMeasuresForFramework(framework.id);
+    if (measures.length === 0) throw new Error("No measures in framework");
+
+    const result = await runAnalysisPipeline({
+      company,
+      framework,
+      measures,
+      cancelCheck: () => !workerRunning,
+    });
+
+    if (result.success) {
+      await storage.completeJob(job.id);
+      if (job.batchId) {
+        const batch = await storage.incrementBatchCompleted(job.batchId);
+        if (batch.completedJobs + batch.failedJobs >= batch.totalJobs) {
+          await storage.completeBatchRun(batch.id);
+          console.log(`[${WORKER_ID}] Batch ${batch.id} completed`);
+        }
+      }
+      console.log(`[${WORKER_ID}] Job ${job.id} completed (${job.companyName}: ${result.analysis?.scorePercentage}%)`);
+    } else {
+      throw new Error(result.error || "Pipeline returned failure");
+    }
+  } catch (error: any) {
+    console.error(`[${WORKER_ID}] Job ${job.id} failed: ${error.message}`);
+    await storage.failJob(job.id, error.message);
+    if (job.batchId) {
+      const batch = await storage.incrementBatchFailed(job.batchId);
+      if (batch.completedJobs + batch.failedJobs >= batch.totalJobs) {
+        await storage.completeBatchRun(batch.id);
+      }
+    }
+  } finally {
+    activeJobs--;
+  }
+
+  return true;
+}
+
+async function workerPollLoop() {
+  console.log(`[${WORKER_ID}] Starting embedded worker (concurrency: ${MAX_CONCURRENT})`);
+
+  while (workerRunning) {
+    try {
+      const claimed = await processNextJob();
+      if (!claimed) {
+        await new Promise((resolve) => setTimeout(resolve, POLL_INTERVAL));
+      } else {
+        await new Promise((resolve) => setTimeout(resolve, 500));
+      }
+    } catch (error: any) {
+      console.error(`[${WORKER_ID}] Poll error: ${error.message}`);
+      await new Promise((resolve) => setTimeout(resolve, POLL_INTERVAL * 2));
+    }
+  }
+}
+
+// ─── Start Server ────────────────────────────────────────────────────────────
+
 async function start() {
   try {
     console.log("[Server] Running startup migrations...");
@@ -112,10 +198,18 @@ async function start() {
       console.log(`[Server] CompanyIQ v2.0 running on port ${PORT}`);
       console.log(`[Server] Environment: ${process.env.NODE_ENV || "development"}`);
     });
+
+    // Start embedded worker after server is listening
+    workerPollLoop();
   } catch (error) {
     console.error("[Server] Failed to start:", error);
     process.exit(1);
   }
 }
+
+process.on("SIGTERM", () => {
+  console.log("[Server] SIGTERM received, shutting down worker");
+  workerRunning = false;
+});
 
 start();
