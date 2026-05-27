@@ -30,7 +30,7 @@ export const api = {
   logout: () => request("/logout", { method: "POST" }),
 
   // Companies
-  getCompanies: () => request("/companies"),
+  getCompanies: (listId?: number) => request(`/companies${listId ? `?listId=${listId}` : ""}`),
   getCompany: (id: number) => request(`/companies/${id}`),
   createCompany: (data: any) => request("/companies", { method: "POST", body: JSON.stringify(data) }),
   updateCompany: (id: number, data: any) => request(`/companies/${id}`, { method: "PATCH", body: JSON.stringify(data) }),
@@ -79,12 +79,14 @@ export const api = {
 
   // Company Lists
   getCompanyLists: () => request("/company-lists"),
-  deleteCompanyList: (id: number) => request(`/company-lists/${id}`, { method: "DELETE" }),
+  deleteCompanyList: (id: number, deleteCompanies: boolean = false) =>
+    request(`/company-lists/${id}?deleteCompanies=${deleteCompanies}`, { method: "DELETE" }),
 
   // Import
-  importCompanies: async (file: File) => {
+  importCompanies: async (file: File, listName?: string) => {
     const formData = new FormData();
     formData.append("file", file);
+    if (listName) formData.append("listName", listName);
     const res = await fetch(`${BASE}/companies/import`, {
       method: "POST",
       body: formData,

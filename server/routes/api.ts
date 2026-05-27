@@ -39,12 +39,25 @@ router.get("/version", (req: Request, res: Response) => {
 
 router.get("/companies", async (req: Request, res: Response) => {
   try {
-    const companies = await storage.getCompanies();
-    const completed = companies.filter((c) => c.analysisStatus === "completed").length;
+    const listId = req.query.listId ? parseInt(req.query.listId as string) : null;
+    let companyList: any[] = [];
+
+    if (listId) {
+      // Get companies filtered by list
+      const lists = await storage.getCompanyLists();
+      const list = lists.find(l => l.id === listId);
+      if (list && list.companyIds && list.companyIds.length > 0) {
+        companyList = await storage.getCompaniesByIds(list.companyIds as number[]);
+      }
+    } else {
+      companyList = await storage.getCompanies();
+    }
+
+    const completed = companyList.filter((c) => c.analysisStatus === "completed").length;
     const avgScore = completed > 0
-      ? Math.round(companies.filter(c => c.totalScore !== null).reduce((sum, c) => sum + (c.totalScore || 0), 0) / completed)
+      ? Math.round(companyList.filter(c => c.totalScore !== null).reduce((sum, c) => sum + (c.totalScore || 0), 0) / completed)
       : 0;
-    res.json({ companies, stats: { total: companies.length, completed, avgScore } });
+    res.json({ companies: companyList, stats: { total: companyList.length, completed, avgScore } });
   } catch (error: any) {
     res.status(500).json({ error: error.message });
   }
@@ -100,25 +113,64 @@ router.post("/companies/import", upload.single("file"), async (req: Request, res
   try {
     if (!req.file) return res.status(400).json({ error: "No file uploaded" });
 
+    const listName = req.body.listName || req.file.originalname || "Imported list";
+
     const XLSX = await import("xlsx");
     const workbook = XLSX.read(req.file.buffer, { type: "buffer" });
     const sheet = workbook.Sheets[workbook.SheetNames[0]];
     const rows: any[] = XLSX.utils.sheet_to_json(sheet);
 
+    // Helper to find a value from multiple possible column names
+    function findCol(row: any, ...keys: string[]): string | null {
+      for (const key of keys) {
+        if (row[key] !== undefined && row[key] !== null && String(row[key]).trim() !== "") {
+          return String(row[key]).trim();
+        }
+      }
+      // Also try case-insensitive partial match
+      const rowKeys = Object.keys(row);
+      for (const candidate of keys) {
+        const found = rowKeys.find(k => k.toLowerCase().includes(candidate.toLowerCase()));
+        if (found && row[found] !== undefined && row[found] !== null && String(row[found]).trim() !== "") {
+          return String(row[found]).trim();
+        }
+      }
+      return null;
+    }
+
     const created: any[] = [];
+    const skipped: string[] = [];
     for (const row of rows) {
-      const name = row.name || row.Name || row.company || row.Company;
+      // Flexible name detection
+      const name = findCol(row, "NAME", "name", "Name", "company", "Company", "COMPANY", "Company Name", "company_name");
       if (!name) continue;
 
       const existing = await storage.getCompanyByName(name);
-      if (existing) continue;
+      if (existing) {
+        skipped.push(name);
+        // Still include existing companies in the list
+        created.push(existing);
+        continue;
+      }
+
+      // Flexible ISIN detection (often labeled "Type" in MSCI files)
+      const isin = findCol(row, "ISIN", "isin", "Type", "type", "Identifier", "ID");
+
+      // Flexible sector detection
+      const sector = findCol(row, "LEVEL2 SECTOR NAME", "LEVEL3 SECTOR NAME", "sector", "Sector", "SECTOR", "Industry", "industry");
+
+      // Flexible country detection
+      const country = findCol(row, "GEOGRAPHIC DESCR.", "GEOGRAPHIC DESCR", "country", "Country", "COUNTRY", "Geography", "Region");
+
+      // Domain detection
+      const domain = findCol(row, "domain", "Domain", "DOMAIN", "website", "Website");
 
       const company = await storage.createCompany({
         name,
-        isin: row.isin || row.ISIN || null,
-        sector: row.sector || row.Sector || null,
-        country: row.country || row.Country || null,
-        domain: row.domain || row.Domain || null,
+        isin: isin || null,
+        sector: sector || null,
+        country: country || null,
+        domain: domain || null,
       });
       created.push(company);
     }
@@ -126,13 +178,18 @@ router.post("/companies/import", upload.single("file"), async (req: Request, res
     // Create a company list record
     if (created.length > 0) {
       await storage.createCompanyList({
-        name: req.file.originalname || "Imported list",
+        name: listName,
         companyIds: created.map((c) => c.id),
         sourceFilename: req.file.originalname,
       });
     }
 
-    res.json({ imported: created.length, total: rows.length });
+    res.json({
+      imported: created.length - skipped.length,
+      existing: skipped.length,
+      total: rows.length,
+      listName,
+    });
   } catch (error: any) {
     res.status(500).json({ error: error.message });
   }
@@ -571,7 +628,25 @@ router.get("/company-lists", async (req: Request, res: Response) => {
 
 router.delete("/company-lists/:id", async (req: Request, res: Response) => {
   try {
-    await storage.deleteCompanyList(parseInt(req.params.id));
+    const listId = parseInt(req.params.id);
+    const deleteCompanies = req.query.deleteCompanies === "true";
+
+    if (deleteCompanies) {
+      // Get the list first to find company IDs
+      const lists = await storage.getCompanyLists();
+      const list = lists.find(l => l.id === listId);
+      if (list && list.companyIds) {
+        for (const companyId of list.companyIds as number[]) {
+          try {
+            await storage.deleteCompany(companyId);
+          } catch (e) {
+            // Company may already be deleted or referenced elsewhere
+          }
+        }
+      }
+    }
+
+    await storage.deleteCompanyList(listId);
     res.json({ success: true });
   } catch (error: any) {
     res.status(500).json({ error: error.message });

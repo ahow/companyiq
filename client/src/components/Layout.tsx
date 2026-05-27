@@ -1,5 +1,5 @@
 import { Link, useLocation } from "react-router-dom";
-import { BarChart3, Building2, Settings, Wrench, Activity, Sparkles, LogOut } from "lucide-react";
+import { BarChart3, Building2, Settings, Wrench, Activity, Sparkles, LogOut, FolderOpen } from "lucide-react";
 import { api } from "../lib/api";
 
 interface LayoutProps {
@@ -9,6 +9,7 @@ interface LayoutProps {
 
 const navItems = [
   { path: "/", label: "Dashboard", icon: BarChart3 },
+  { path: "/company-lists", label: "Lists", icon: FolderOpen },
   { path: "/framework", label: "Framework", icon: Building2 },
   { path: "/framework-builder", label: "AI Builder", icon: Sparkles },
   { path: "/settings", label: "Settings", icon: Settings },

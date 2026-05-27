@@ -1,22 +1,28 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useRef } from "react";
 import { Link } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { api } from "../lib/api";
 import {
   Plus, Upload, Play, Square, Search, Trash2, ExternalLink,
-  CheckCircle2, XCircle, Clock, Loader2, AlertCircle, Download
+  CheckCircle2, XCircle, Clock, Loader2, AlertCircle, Download, Filter
 } from "lucide-react";
 
 export default function DashboardPage() {
   const queryClient = useQueryClient();
   const [search, setSearch] = useState("");
+  const [selectedListId, setSelectedListId] = useState<number | undefined>(undefined);
   const [showAddModal, setShowAddModal] = useState(false);
   const [newCompany, setNewCompany] = useState({ name: "", isin: "", sector: "", country: "", domain: "" });
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  const { data: companyLists = [] } = useQuery({
+    queryKey: ["companyLists"],
+    queryFn: api.getCompanyLists,
+  });
+
   const { data: companiesData, isLoading } = useQuery({
-    queryKey: ["companies"],
-    queryFn: api.getCompanies,
+    queryKey: ["companies", selectedListId],
+    queryFn: () => api.getCompanies(selectedListId),
     refetchInterval: 10000,
   });
 
@@ -52,7 +58,10 @@ export default function DashboardPage() {
 
   const importMutation = useMutation({
     mutationFn: (file: File) => api.importCompanies(file),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["companies"] }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["companies"] });
+      queryClient.invalidateQueries({ queryKey: ["companyLists"] });
+    },
   });
 
   const companies = companiesData?.companies || [];
@@ -136,15 +145,35 @@ export default function DashboardPage() {
 
       {/* Controls */}
       <div className="flex flex-col md:flex-row gap-3 items-start md:items-center justify-between">
-        <div className="relative flex-1 max-w-md">
-          <Search className="absolute left-3 top-2.5 w-4 h-4 text-gray-400" />
-          <input
-            type="text"
-            placeholder="Search companies..."
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            className="w-full pl-9 pr-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none text-sm"
-          />
+        <div className="flex items-center gap-3 flex-1">
+          {/* Search */}
+          <div className="relative flex-1 max-w-md">
+            <Search className="absolute left-3 top-2.5 w-4 h-4 text-gray-400" />
+            <input
+              type="text"
+              placeholder="Search companies..."
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              className="w-full pl-9 pr-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none text-sm"
+            />
+          </div>
+
+          {/* List Selector Dropdown */}
+          <div className="relative">
+            <Filter className="absolute left-3 top-2.5 w-4 h-4 text-gray-400" />
+            <select
+              value={selectedListId || ""}
+              onChange={(e) => setSelectedListId(e.target.value ? parseInt(e.target.value) : undefined)}
+              className="pl-9 pr-8 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none text-sm appearance-none bg-white min-w-[180px]"
+            >
+              <option value="">All Companies</option>
+              {companyLists.map((list: any) => (
+                <option key={list.id} value={list.id}>
+                  {list.name} ({(list.companyIds as number[])?.length || 0})
+                </option>
+              ))}
+            </select>
+          </div>
         </div>
 
         <div className="flex gap-2">
@@ -186,6 +215,25 @@ export default function DashboardPage() {
         />
       </div>
 
+      {/* Import status */}
+      {importMutation.isSuccess && (
+        <div className="flex items-center gap-2 p-3 bg-green-50 border border-green-200 rounded-lg">
+          <CheckCircle2 className="w-4 h-4 text-green-600" />
+          <span className="text-sm text-green-700">
+            Import successful! {(importMutation.data as any)?.imported} companies added.
+          </span>
+        </div>
+      )}
+
+      {importMutation.isError && (
+        <div className="flex items-center gap-2 p-3 bg-red-50 border border-red-200 rounded-lg">
+          <AlertCircle className="w-4 h-4 text-red-600" />
+          <span className="text-sm text-red-700">
+            Import failed: {(importMutation.error as any)?.message}
+          </span>
+        </div>
+      )}
+
       {/* Company Table */}
       <div className="bg-white rounded-lg border overflow-hidden">
         <table className="w-full">
@@ -210,7 +258,11 @@ export default function DashboardPage() {
             ) : filtered.length === 0 ? (
               <tr>
                 <td colSpan={6} className="px-4 py-8 text-center text-gray-500">
-                  {companies.length === 0 ? "No companies yet. Add or import companies to get started." : "No companies match your search."}
+                  {companies.length === 0
+                    ? selectedListId
+                      ? "No companies in this list."
+                      : "No companies yet. Add or import companies to get started."
+                    : "No companies match your search."}
                 </td>
               </tr>
             ) : (

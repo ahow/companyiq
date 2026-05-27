@@ -8,6 +8,7 @@ import FrameworkPage from "./pages/FrameworkPage";
 import FrameworkBuilderPage from "./pages/FrameworkBuilderPage";
 import SettingsPage from "./pages/SettingsPage";
 import DiagnosticsPage from "./pages/DiagnosticsPage";
+import CompanyListsPage from "./pages/CompanyListsPage";
 
 function App() {
   const [authenticated, setAuthenticated] = useState<boolean | null>(null);
@@ -43,6 +44,7 @@ function App() {
           <Route path="/framework-builder" element={<FrameworkBuilderPage />} />
           <Route path="/settings" element={<SettingsPage />} />
           <Route path="/diagnostics" element={<DiagnosticsPage />} />
+          <Route path="/company-lists" element={<CompanyListsPage />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </Layout>
