@@ -420,6 +420,18 @@ router.post("/companies/analyze-all", async (req: Request, res: Response) => {
 
     if (companiesToAnalyze.length === 0) return res.status(400).json({ error: "No companies to analyze" });
 
+    // Auto-reset all companies in scope before starting batch
+    // This ensures ALL companies get processed, not just idle ones
+    for (const company of companiesToAnalyze) {
+      await storage.updateCompany(company.id, {
+        analysisStatus: "idle",
+        totalScore: null as any,
+        summary: null as any,
+      });
+      // Clear existing measure scores for this company
+      await storage.clearMeasureScores(company.id);
+    }
+
     // Create batch run
     const batch = await storage.createBatchRun({
       totalJobs: companiesToAnalyze.length,
@@ -427,7 +439,7 @@ router.post("/companies/analyze-all", async (req: Request, res: Response) => {
       triggeredBy: "web",
     });
 
-    // Enqueue jobs
+    // Enqueue jobs for ALL companies in scope
     for (const company of companiesToAnalyze) {
       await storage.createAnalysisJob({
         companyId: company.id,
