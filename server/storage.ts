@@ -342,7 +342,25 @@ export class Storage {
       WHERE id IN (SELECT id FROM claimed)
       RETURNING *
     `);
-    return result.rows[0] as AnalysisJob | undefined;
+    const row = result.rows[0];
+    if (!row) return undefined;
+    // Map snake_case columns from raw SQL to camelCase AnalysisJob type
+    return {
+      id: row.id,
+      companyId: row.company_id,
+      companyName: row.company_name,
+      batchId: row.batch_id,
+      frameworkId: row.framework_id,
+      status: row.status,
+      workerId: row.worker_id,
+      claimedAt: row.claimed_at,
+      completedAt: row.completed_at,
+      attempts: row.attempts,
+      lastError: row.last_error,
+      priority: row.priority,
+      createdAt: row.created_at,
+      updatedAt: row.updated_at,
+    } as AnalysisJob;
   }
 
   async completeJob(jobId: number): Promise<void> {
