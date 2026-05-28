@@ -50,6 +50,8 @@ export async function runAnalysisPipeline(opts: PipelineOptions): Promise<Pipeli
       companyId,
       companyDomain: company.domain,
       isin: company.isin,
+      sector: company.sector,
+      country: company.country,
       pinnedUrls,
       framework,
       trustedSources,
@@ -88,8 +90,18 @@ export async function runAnalysisPipeline(opts: PipelineOptions): Promise<Pipeli
       }
     }
 
-    // Cap at 12 documents for processing (ranked by discovery priority)
-    const docsToProcess = finalDocs.slice(0, 12);
+    // Sort by discovery priority (lower = better) and cap at 20 documents
+    // Priority comes from the discovery ranking; pinned docs have priority -100
+    const priorityMap = new Map<string, number>();
+    for (const doc of discoveryResult.documents) {
+      priorityMap.set(doc.url, doc.priority);
+    }
+    finalDocs.sort((a, b) => {
+      const pa = priorityMap.get(a.url) ?? 50;
+      const pb = priorityMap.get(b.url) ?? 50;
+      return pa - pb;
+    });
+    const docsToProcess = finalDocs.slice(0, 20);
 
     console.log(`[${companyName}] Processing ${docsToProcess.length} docs (${discoveryResult.documents.length} fresh + ${cachedDocs.length} from cache)`);
 

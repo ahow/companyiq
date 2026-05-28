@@ -199,11 +199,20 @@ function calculatePriority(
 async function runRelevanceGate(
   candidates: DiscoveryCandidate[],
   framework: Framework,
-  companyName: string
+  companyName: string,
+  companyContext?: { sector?: string | null; country?: string | null; isin?: string | null; domain?: string | null }
 ): Promise<DiscoveryCandidate[]> {
   const gateModel = "claude-haiku";
   const batchSize = 20;
   const accepted: DiscoveryCandidate[] = [];
+
+  // Build company identity context for disambiguation
+  const identityParts: string[] = [];
+  if (companyContext?.sector) identityParts.push(`Sector: ${companyContext.sector}`);
+  if (companyContext?.country) identityParts.push(`Country: ${companyContext.country}`);
+  if (companyContext?.isin) identityParts.push(`ISIN: ${companyContext.isin}`);
+  if (companyContext?.domain) identityParts.push(`Official domain: ${companyContext.domain}`);
+  const identityBlock = identityParts.length > 0 ? `\nCompany identity: ${identityParts.join(", ")}` : "";
 
   for (let i = 0; i < candidates.length; i += batchSize) {
     const batch = candidates.slice(i, i + batchSize);
@@ -213,8 +222,18 @@ async function runRelevanceGate(
 
     try {
       const { text } = await completeWithFallback(gateModel, {
-        system: `You are a document relevance classifier. Given a list of URLs found for a company, classify each as "accept" or "reject" based on whether it is likely to contain substantive disclosure relevant to the analysis topic. Accept corporate reports, filings, policy documents, governance pages. Reject news articles, marketing content, job postings, product pages.`,
-        prompt: `Company: ${companyName}\nAnalysis topic: ${framework.topicDescription || framework.name}\n\nClassify each URL:\n\n${urlList}\n\nReturn a JSON array of objects: [{"index": 1, "verdict": "accept"|"reject", "reason": "brief reason"}]`,
+        system: `You are a document relevance classifier for corporate disclosure analysis. Given a list of URLs found for a specific company, classify each as "accept" or "reject".
+
+ACCEPT: Corporate reports, filings, policy documents, governance pages, sustainability reports, annual reports, and other substantive disclosures that are ABOUT THIS SPECIFIC COMPANY.
+
+REJECT:
+- Documents about a DIFFERENT entity that happens to share a similar name or acronym (e.g., EU regulatory body ACER vs. Acer the computer company)
+- News articles, marketing content, job postings, product pages
+- YouTube videos, social media posts (unless they link to official disclosures)
+- Documents from unrelated organizations
+
+IMPORTANT: Pay close attention to the company identity (sector, country, domain) to distinguish from similarly-named entities.`,
+        prompt: `Company: ${companyName}${identityBlock}\nAnalysis topic: ${framework.topicDescription || framework.name}\n\nClassify each URL as relevant to THIS SPECIFIC COMPANY's disclosures:\n\n${urlList}\n\nReturn a JSON array of objects: [{"index": 1, "verdict": "accept"|"reject", "reason": "brief reason"}]`,
         json: true,
         maxTokens: 2000,
       });
@@ -258,6 +277,8 @@ export async function searchCompanyDocuments(opts: {
   companyId: number;
   companyDomain?: string | null;
   isin?: string | null;
+  sector?: string | null;
+  country?: string | null;
   pinnedUrls?: string[];
   framework: Framework;
   trustedSources: TrustedSource[];
@@ -368,7 +389,12 @@ export async function searchCompanyDocuments(opts: {
 
   // Run relevance gate
   console.log(`[${companyName}] Running relevance gate on ${preGateCandidates.length} candidates`);
-  const accepted = await runRelevanceGate(preGateCandidates, framework, companyName);
+  const accepted = await runRelevanceGate(preGateCandidates, framework, companyName, {
+    sector: opts.sector,
+    country: opts.country,
+    isin: opts.isin,
+    domain: companyDomain,
+  });
 
   console.log(`[${companyName}] Gate accepted ${accepted.length} documents`);
 
