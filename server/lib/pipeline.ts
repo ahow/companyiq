@@ -81,7 +81,7 @@ export async function runAnalysisPipeline(opts: PipelineOptions): Promise<Pipeli
 
     // Process ALL discovered documents (up to a generous cap of 40)
     // More documents = better chance of finding evidence for each measure
-    const DOC_CAP = 40;
+    const DOC_CAP = 25;
     const docsToProcess = sortedDocs.slice(0, DOC_CAP).map(doc => ({
       url: doc.url,
       title: doc.title,
