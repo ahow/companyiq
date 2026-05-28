@@ -113,7 +113,7 @@ const MAX_CONCURRENT = parseInt(process.env.WORKER_CONCURRENCY || "3");
 let workerRunning = true;
 let activeJobs = 0;
 
-const JOB_TIMEOUT = 10 * 60 * 1000; // 10 minutes max per job
+const JOB_TIMEOUT = 15 * 60 * 1000; // 15 minutes max per job
 
 function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise<T> {
   return new Promise((resolve, reject) => {
