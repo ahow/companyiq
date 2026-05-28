@@ -49,7 +49,7 @@ router.get("/debug/jobs", async (req: Request, res: Response) => {
       SELECT column_name, data_type FROM information_schema.columns 
       WHERE table_name = 'analysis_jobs' ORDER BY ordinal_position
     `);
-    const batch5Jobs = await db.execute(sql`SELECT id, company_id, company_name, status, last_error, worker_id, claimed_at, completed_at FROM analysis_jobs WHERE batch_id = 5 ORDER BY status, id LIMIT 10`);
+    const batch5Jobs = await db.execute(sql`SELECT id, company_id, company_name, status, last_error, worker_id, claimed_at, completed_at FROM analysis_jobs WHERE batch_id = 6 ORDER BY status, id LIMIT 10`);
     const claimedJobs = await db.execute(sql`SELECT id, company_id, company_name, status, last_error, worker_id, claimed_at FROM analysis_jobs WHERE status = 'claimed' ORDER BY claimed_at`);
     const recentErrors = await db.execute(sql`SELECT * FROM processing_errors ORDER BY created_at DESC LIMIT 5`);
     const companyStatuses = await db.execute(sql`SELECT analysis_status, COUNT(*) as count FROM companies GROUP BY analysis_status`);
