@@ -113,12 +113,16 @@ const MAX_CONCURRENT = parseInt(process.env.WORKER_CONCURRENCY || "2");
 let workerRunning = true;
 let activeJobs = 0;
 
-async function processNextJob(): Promise<boolean> {
-  if (activeJobs >= MAX_CONCURRENT) return false;
+const JOB_TIMEOUT = 10 * 60 * 1000; // 10 minutes max per job
 
-  const job = await storage.claimJob(WORKER_ID);
-  if (!job) return false;
+function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise<T> {
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error(`Timeout after ${ms/1000}s: ${label}`)), ms);
+    promise.then(resolve, reject).finally(() => clearTimeout(timer));
+  });
+}
 
+async function executeJob(job: any): Promise<void> {
   activeJobs++;
   console.log(`[${WORKER_ID}] Claimed job ${job.id} for ${job.companyName} (attempt ${job.attempts})`);
 
@@ -132,12 +136,16 @@ async function processNextJob(): Promise<boolean> {
     const measures = await storage.getMeasuresForFramework(framework.id);
     if (measures.length === 0) throw new Error("No measures in framework");
 
-    const result = await runAnalysisPipeline({
-      company,
-      framework,
-      measures,
-      cancelCheck: () => !workerRunning,
-    });
+    const result = await withTimeout(
+      runAnalysisPipeline({
+        company,
+        framework,
+        measures,
+        cancelCheck: () => !workerRunning,
+      }),
+      JOB_TIMEOUT,
+      `Pipeline for ${job.companyName}`
+    );
 
     if (result.success) {
       await storage.completeJob(job.id);
@@ -164,6 +172,18 @@ async function processNextJob(): Promise<boolean> {
   } finally {
     activeJobs--;
   }
+}
+
+async function tryClaimAndProcess(): Promise<boolean> {
+  if (activeJobs >= MAX_CONCURRENT) return false;
+
+  const job = await storage.claimJob(WORKER_ID);
+  if (!job) return false;
+
+  // Fire-and-forget: don't await the job execution
+  executeJob(job).catch((err) => {
+    console.error(`[${WORKER_ID}] Unhandled job error: ${err.message}`);
+  });
 
   return true;
 }
@@ -176,13 +196,23 @@ async function workerPollLoop() {
     try {
       pollCount++;
       if (pollCount % 12 === 1) {
-        console.log(`[${WORKER_ID}] Poll #${pollCount}, activeJobs=${activeJobs}, workerRunning=${workerRunning}`);
+        console.log(`[${WORKER_ID}] Poll #${pollCount}, activeJobs=${activeJobs}/${MAX_CONCURRENT}, workerRunning=${workerRunning}`);
       }
-      const claimed = await processNextJob();
-      if (!claimed) {
-        await new Promise((resolve) => setTimeout(resolve, POLL_INTERVAL));
+
+      // Try to claim up to MAX_CONCURRENT jobs
+      if (activeJobs < MAX_CONCURRENT) {
+        const claimed = await tryClaimAndProcess();
+        if (!claimed) {
+          // No jobs available, wait before polling again
+          await new Promise((resolve) => setTimeout(resolve, POLL_INTERVAL));
+        } else {
+          // Successfully claimed, try to claim another immediately
+          await new Promise((resolve) => setTimeout(resolve, 200));
+          continue;
+        }
       } else {
-        await new Promise((resolve) => setTimeout(resolve, 500));
+        // At capacity, wait before checking again
+        await new Promise((resolve) => setTimeout(resolve, 2000));
       }
     } catch (error: any) {
       console.error(`[${WORKER_ID}] Poll error: ${error.message}`);
