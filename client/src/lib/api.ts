@@ -41,10 +41,15 @@ export const api = {
   getCompanyTerminology: (id: number) => request(`/companies/${id}/terminology`),
 
   // Batch
-  analyzeAll: () => request("/companies/analyze-all", { method: "POST" }),
+  analyzeAll: (opts?: { listId?: number; frameworkId?: number }) =>
+    request("/companies/analyze-all", { method: "POST", body: JSON.stringify(opts || {}) }),
   getBatchStatus: () => request("/batch/status"),
   cancelBatch: () => request("/batch/cancel", { method: "POST" }),
   getBatchRuns: () => request("/batch/runs"),
+
+  // Reset
+  resetCompany: (id: number) => request(`/companies/${id}/reset`, { method: "POST" }),
+  resetCompanyList: (listId: number) => request(`/company-lists/${listId}/reset`, { method: "POST" }),
 
   // Frameworks
   getFrameworks: () => request("/frameworks"),

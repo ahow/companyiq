@@ -267,6 +267,38 @@ router.post("/companies/:id/documents", upload.single("file"), async (req: Reque
   }
 });
 
+// ─── Reset / Clear Results ──────────────────────────────────────────────────
+
+// Reset a single company (clear scores, summary, status)
+router.post("/companies/:id/reset", async (req: Request, res: Response) => {
+  try {
+    const companyId = parseInt(req.params.id);
+    const company = await storage.getCompany(companyId);
+    if (!company) return res.status(404).json({ error: "Company not found" });
+
+    await storage.resetCompany(companyId);
+    res.json({ success: true, companyId, companyName: company.name });
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Reset all companies in a list
+router.post("/company-lists/:id/reset", async (req: Request, res: Response) => {
+  try {
+    const listId = parseInt(req.params.id);
+    const lists = await storage.getCompanyLists();
+    const list = lists.find(l => l.id === listId);
+    if (!list) return res.status(404).json({ error: "List not found" });
+
+    const companyIds = (list.companyIds || []) as number[];
+    const resetCount = await storage.resetCompanies(companyIds);
+    res.json({ success: true, listId, listName: list.name, resetCount });
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
 // ─── Analyze ─────────────────────────────────────────────────────────────────
 
 // Path A: Single company full analysis (fetch + analyze)
@@ -338,31 +370,51 @@ router.post("/companies/:id/re-analyze", async (req: Request, res: Response) => 
   }
 });
 
-// Path B: Batch analyze all companies
+// Path B: Batch analyze — now accepts optional listId and frameworkId
 router.post("/companies/analyze-all", async (req: Request, res: Response) => {
   try {
     if (batchState.running) {
       return res.status(409).json({ error: "A batch is already running" });
     }
 
-    const framework = await storage.getActiveFramework();
-    if (!framework) return res.status(400).json({ error: "No active framework" });
+    // Accept optional frameworkId — if not provided, use active framework
+    let framework: Framework | undefined;
+    if (req.body.frameworkId) {
+      framework = await storage.getFramework(parseInt(req.body.frameworkId));
+      if (!framework) return res.status(400).json({ error: "Framework not found" });
+    } else {
+      framework = await storage.getActiveFramework();
+      if (!framework) return res.status(400).json({ error: "No active framework" });
+    }
 
     const measures = await storage.getMeasuresForFramework(framework.id);
     if (measures.length === 0) return res.status(400).json({ error: "Framework has no measures" });
 
-    const companies = await storage.getCompanies();
-    if (companies.length === 0) return res.status(400).json({ error: "No companies to analyze" });
+    // Accept optional listId — if provided, only analyze companies in that list
+    let companiesToAnalyze: any[];
+    let listName: string | undefined;
+    if (req.body.listId) {
+      const lists = await storage.getCompanyLists();
+      const list = lists.find(l => l.id === parseInt(req.body.listId));
+      if (!list) return res.status(400).json({ error: "Company list not found" });
+      listName = list.name;
+      const companyIds = (list.companyIds || []) as number[];
+      companiesToAnalyze = await storage.getCompaniesByIds(companyIds);
+    } else {
+      companiesToAnalyze = await storage.getCompanies();
+    }
+
+    if (companiesToAnalyze.length === 0) return res.status(400).json({ error: "No companies to analyze" });
 
     // Create batch run
     const batch = await storage.createBatchRun({
-      totalJobs: companies.length,
+      totalJobs: companiesToAnalyze.length,
       frameworkId: framework.id,
       triggeredBy: "web",
     });
 
     // Enqueue jobs
-    for (const company of companies) {
+    for (const company of companiesToAnalyze) {
       await storage.createAnalysisJob({
         companyId: company.id,
         companyName: company.name,
@@ -375,7 +427,14 @@ router.post("/companies/analyze-all", async (req: Request, res: Response) => {
     batchState.cancelRequested = false;
     batchState.currentEpoch++;
 
-    res.json({ batchId: batch.id, totalJobs: companies.length });
+    res.json({
+      batchId: batch.id,
+      totalJobs: companiesToAnalyze.length,
+      frameworkId: framework.id,
+      frameworkName: framework.name,
+      listId: req.body.listId || null,
+      listName: listName || "All companies",
+    });
   } catch (error: any) {
     res.status(500).json({ error: error.message });
   }

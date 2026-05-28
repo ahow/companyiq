@@ -4,13 +4,14 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { api } from "../lib/api";
 import {
   Plus, Upload, Play, Square, Search, Trash2, ExternalLink,
-  CheckCircle2, XCircle, Clock, Loader2, AlertCircle, Download, Filter
+  CheckCircle2, XCircle, Clock, Loader2, AlertCircle, Download, Filter, RotateCcw
 } from "lucide-react";
 
 export default function DashboardPage() {
   const queryClient = useQueryClient();
   const [search, setSearch] = useState("");
   const [selectedListId, setSelectedListId] = useState<number | undefined>(undefined);
+  const [selectedFrameworkId, setSelectedFrameworkId] = useState<number | undefined>(undefined);
   const [showAddModal, setShowAddModal] = useState(false);
   const [newCompany, setNewCompany] = useState({ name: "", isin: "", sector: "", country: "", domain: "" });
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -18,6 +19,11 @@ export default function DashboardPage() {
   const { data: companyLists = [] } = useQuery({
     queryKey: ["companyLists"],
     queryFn: api.getCompanyLists,
+  });
+
+  const { data: frameworksData = [] } = useQuery({
+    queryKey: ["frameworks"],
+    queryFn: api.getFrameworks,
   });
 
   const { data: companiesData, isLoading } = useQuery({
@@ -33,13 +39,27 @@ export default function DashboardPage() {
   });
 
   const analyzeAllMutation = useMutation({
-    mutationFn: api.analyzeAll,
+    mutationFn: (opts?: { listId?: number; frameworkId?: number }) => api.analyzeAll(opts),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["batchStatus"] }),
   });
 
   const cancelBatchMutation = useMutation({
     mutationFn: api.cancelBatch,
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["batchStatus"] }),
+  });
+
+  const resetListMutation = useMutation({
+    mutationFn: (listId: number) => api.resetCompanyList(listId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["companies"] });
+    },
+  });
+
+  const resetCompanyMutation = useMutation({
+    mutationFn: (id: number) => api.resetCompany(id),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["companies"] });
+    },
   });
 
   const createCompanyMutation = useMutation({
@@ -72,6 +92,13 @@ export default function DashboardPage() {
     (c.sector || "").toLowerCase().includes(search.toLowerCase())
   );
 
+  // Determine the active framework (either selected or the one marked active)
+  const activeFramework = frameworksData.find((f: any) => f.isActive);
+  const effectiveFrameworkId = selectedFrameworkId || activeFramework?.id;
+  const effectiveFrameworkName = selectedFrameworkId
+    ? frameworksData.find((f: any) => f.id === selectedFrameworkId)?.name
+    : activeFramework?.name;
+
   const getStatusIcon = (status: string) => {
     switch (status) {
       case "completed": return <CheckCircle2 className="w-4 h-4 text-green-500" />;
@@ -89,6 +116,24 @@ export default function DashboardPage() {
     if (score >= 70) return "text-green-600";
     if (score >= 40) return "text-yellow-600";
     return "text-red-600";
+  };
+
+  const handleAnalyzeAll = () => {
+    const opts: { listId?: number; frameworkId?: number } = {};
+    if (selectedListId) opts.listId = selectedListId;
+    if (selectedFrameworkId) opts.frameworkId = selectedFrameworkId;
+    analyzeAllMutation.mutate(opts);
+  };
+
+  const handleResetList = () => {
+    if (!selectedListId) {
+      alert("Please select a company list to reset.");
+      return;
+    }
+    const listName = companyLists.find((l: any) => l.id === selectedListId)?.name || "this list";
+    if (confirm(`Reset all companies in "${listName}"? This will clear their scores and analysis status.`)) {
+      resetListMutation.mutate(selectedListId);
+    }
   };
 
   return (
@@ -145,6 +190,75 @@ export default function DashboardPage() {
         </div>
       )}
 
+      {/* Analysis Configuration: List + Framework Selection */}
+      <div className="bg-white rounded-lg border p-4">
+        <h3 className="text-sm font-semibold text-gray-700 mb-3">Analysis Configuration</h3>
+        <div className="flex flex-col md:flex-row gap-4 items-start md:items-end">
+          {/* Company List Selector */}
+          <div className="flex-1">
+            <label className="block text-xs font-medium text-gray-500 mb-1">Company List</label>
+            <select
+              value={selectedListId || ""}
+              onChange={(e) => setSelectedListId(e.target.value ? parseInt(e.target.value) : undefined)}
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none text-sm bg-white"
+            >
+              <option value="">All Companies ({companies.length})</option>
+              {companyLists.map((list: any) => (
+                <option key={list.id} value={list.id}>
+                  {list.name} ({(list.companyIds as number[])?.length || 0})
+                </option>
+              ))}
+            </select>
+          </div>
+
+          {/* Framework Selector */}
+          <div className="flex-1">
+            <label className="block text-xs font-medium text-gray-500 mb-1">Framework Template</label>
+            <select
+              value={selectedFrameworkId || ""}
+              onChange={(e) => setSelectedFrameworkId(e.target.value ? parseInt(e.target.value) : undefined)}
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none text-sm bg-white"
+            >
+              {activeFramework && (
+                <option value="">{activeFramework.name} (active)</option>
+              )}
+              {frameworksData
+                .filter((f: any) => !f.isActive)
+                .map((f: any) => (
+                  <option key={f.id} value={f.id}>
+                    {f.name}
+                  </option>
+                ))}
+            </select>
+          </div>
+
+          {/* Action Buttons */}
+          <div className="flex gap-2">
+            <button
+              onClick={handleAnalyzeAll}
+              disabled={batchStatus?.running || companies.length === 0}
+              className="flex items-center gap-1 px-4 py-2 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
+              title={`Analyze ${selectedListId ? "selected list" : "all companies"} with ${effectiveFrameworkName || "active framework"}`}
+            >
+              <Play className="w-4 h-4" /> Analyze
+            </button>
+            <button
+              onClick={handleResetList}
+              disabled={!selectedListId || batchStatus?.running}
+              className="flex items-center gap-1 px-3 py-2 text-sm bg-amber-50 border border-amber-300 text-amber-700 rounded-lg hover:bg-amber-100 disabled:opacity-50 disabled:cursor-not-allowed"
+              title="Reset all companies in selected list (clear scores)"
+            >
+              <RotateCcw className="w-4 h-4" /> Reset List
+            </button>
+          </div>
+        </div>
+        {effectiveFrameworkName && (
+          <p className="text-xs text-gray-500 mt-2">
+            Will analyze {selectedListId ? `companies in selected list` : "all companies"} using <strong>{effectiveFrameworkName}</strong>
+          </p>
+        )}
+      </div>
+
       {/* Controls */}
       <div className="flex flex-col md:flex-row gap-3 items-start md:items-center justify-between">
         <div className="flex items-center gap-3 flex-1">
@@ -158,23 +272,6 @@ export default function DashboardPage() {
               onChange={(e) => setSearch(e.target.value)}
               className="w-full pl-9 pr-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none text-sm"
             />
-          </div>
-
-          {/* List Selector Dropdown */}
-          <div className="relative">
-            <Filter className="absolute left-3 top-2.5 w-4 h-4 text-gray-400" />
-            <select
-              value={selectedListId || ""}
-              onChange={(e) => setSelectedListId(e.target.value ? parseInt(e.target.value) : undefined)}
-              className="pl-9 pr-8 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none text-sm appearance-none bg-white min-w-[180px]"
-            >
-              <option value="">All Companies</option>
-              {companyLists.map((list: any) => (
-                <option key={list.id} value={list.id}>
-                  {list.name} ({(list.companyIds as number[])?.length || 0})
-                </option>
-              ))}
-            </select>
           </div>
         </div>
 
@@ -197,13 +294,6 @@ export default function DashboardPage() {
           >
             <Download className="w-4 h-4" /> Export
           </a>
-          <button
-            onClick={() => analyzeAllMutation.mutate()}
-            disabled={batchStatus?.running || companies.length === 0}
-            className="flex items-center gap-1 px-4 py-2 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            <Play className="w-4 h-4" /> Analyze All
-          </button>
         </div>
         <input
           ref={fileInputRef}
@@ -232,6 +322,16 @@ export default function DashboardPage() {
           <AlertCircle className="w-4 h-4 text-red-600" />
           <span className="text-sm text-red-700">
             Import failed: {(importMutation.error as any)?.message}
+          </span>
+        </div>
+      )}
+
+      {/* Reset List status */}
+      {resetListMutation.isSuccess && (
+        <div className="flex items-center gap-2 p-3 bg-amber-50 border border-amber-200 rounded-lg">
+          <RotateCcw className="w-4 h-4 text-amber-600" />
+          <span className="text-sm text-amber-700">
+            List reset successfully. {(resetListMutation.data as any)?.resetCount} companies cleared.
           </span>
         </div>
       )}
@@ -276,11 +376,11 @@ export default function DashboardPage() {
                     </Link>
                     {company.isin && <p className="text-xs text-gray-400">{company.isin}</p>}
                   </td>
-                  <td className="px-4 py-3 text-sm text-gray-600 hidden md:table-cell">{company.sector || "—"}</td>
-                  <td className="px-4 py-3 text-sm text-gray-600 hidden md:table-cell">{company.country || "—"}</td>
+                  <td className="px-4 py-3 text-sm text-gray-600 hidden md:table-cell">{company.sector || "\u2014"}</td>
+                  <td className="px-4 py-3 text-sm text-gray-600 hidden md:table-cell">{company.country || "\u2014"}</td>
                   <td className="px-4 py-3 text-center">
                     <span className={`text-sm font-bold ${getScoreColor(company.totalScore)}`}>
-                      {company.totalScore !== null ? `${company.totalScore}%` : "—"}
+                      {company.totalScore !== null ? `${company.totalScore}%` : "\u2014"}
                     </span>
                   </td>
                   <td className="px-4 py-3 text-center">
@@ -291,6 +391,17 @@ export default function DashboardPage() {
                   </td>
                   <td className="px-4 py-3 text-right">
                     <div className="flex items-center justify-end gap-1">
+                      <button
+                        onClick={() => {
+                          if (confirm(`Reset ${company.name}? This will clear scores and analysis status.`)) {
+                            resetCompanyMutation.mutate(company.id);
+                          }
+                        }}
+                        className="p-1 text-gray-400 hover:text-amber-600 rounded"
+                        title="Reset analysis"
+                      >
+                        <RotateCcw className="w-4 h-4" />
+                      </button>
                       <Link
                         to={`/company/${company.id}`}
                         className="p-1 text-gray-400 hover:text-blue-600 rounded"

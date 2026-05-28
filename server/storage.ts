@@ -733,6 +733,37 @@ export class Storage {
   async deleteCompanyList(id: number): Promise<void> {
     await db.delete(companyLists).where(eq(companyLists.id, id));
   }
+
+  // ─── Reset / Clear Results ──────────────────────────────────────────────────
+
+  async resetCompany(companyId: number): Promise<void> {
+    // Clear scores, summary, and reset status
+    await db.delete(measureScores).where(eq(measureScores.companyId, companyId));
+    await db
+      .update(companies)
+      .set({
+        totalScore: null,
+        summary: null,
+        analysisStatus: "idle",
+        updatedAt: new Date(),
+      })
+      .where(eq(companies.id, companyId));
+  }
+
+  async resetCompanies(companyIds: number[]): Promise<number> {
+    if (companyIds.length === 0) return 0;
+    await db.delete(measureScores).where(inArray(measureScores.companyId, companyIds));
+    await db
+      .update(companies)
+      .set({
+        totalScore: null,
+        summary: null,
+        analysisStatus: "idle",
+        updatedAt: new Date(),
+      })
+      .where(inArray(companies.id, companyIds));
+    return companyIds.length;
+  }
 }
 
 export const storage = new Storage();
