@@ -107,9 +107,19 @@ export async function runAnalysisPipeline(opts: PipelineOptions): Promise<Pipeli
     const documentTexts: string[] = [];
     const documentUrls: string[] = [];
 
-    // Process documents sequentially to manage memory
+    // Process documents sequentially with a total time budget
+    const FETCH_BUDGET_MS = 5 * 60 * 1000; // 5 minutes max for all fetches
+    const fetchStartTime = Date.now();
+
     for (const doc of docsToProcess) {
       if (cancelCheck?.()) break;
+
+      // Check time budget
+      const elapsed = Date.now() - fetchStartTime;
+      if (elapsed > FETCH_BUDGET_MS) {
+        console.log(`[${companyName}] Fetch time budget exhausted after ${Math.round(elapsed/1000)}s, processed ${documentTexts.length} docs`);
+        break;
+      }
 
       try {
         const content = await processDocument(doc.url, doc.type as "pdf" | "html");
