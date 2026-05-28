@@ -35,6 +35,23 @@ router.get("/version", (req: Request, res: Response) => {
   res.json({ version: "2.0.0", buildDate: new Date().toISOString() });
 });
 
+// Force-reset stuck claimed jobs back to pending
+router.post("/debug/reset-stuck", async (req: Request, res: Response) => {
+  try {
+    const { db } = await import("../db.js");
+    const { sql } = await import("drizzle-orm");
+    const result = await db.execute(sql`
+      UPDATE analysis_jobs 
+      SET status = 'pending', worker_id = NULL, claimed_at = NULL, attempts = 1
+      WHERE status = 'claimed' AND claimed_at < NOW() - INTERVAL '10 minutes'
+      RETURNING id, company_name
+    `);
+    res.json({ reset: result.rows.length, jobs: result.rows });
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
 // Debug endpoint to check job queue status
 router.get("/debug/jobs", async (req: Request, res: Response) => {
   try {

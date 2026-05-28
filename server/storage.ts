@@ -345,7 +345,7 @@ export class Storage {
         SELECT id FROM analysis_jobs
         WHERE status = 'claimed'
           AND claimed_at < NOW() - INTERVAL '15 minutes'
-          AND attempts < 3
+          AND attempts < 6
         ORDER BY claimed_at ASC
         FOR UPDATE SKIP LOCKED
         LIMIT 1
