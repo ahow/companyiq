@@ -81,7 +81,7 @@ function buildGeneralQueries(companyName: string, framework: Framework): string[
 }
 
 function buildDomainQueries(companyName: string, domain: string, framework: Framework): string[] {
-  return [
+  const baseQueries = [
     `site:${domain} sustainability report`,
     `site:${domain} governance`,
     `site:${domain} ESG`,
@@ -89,6 +89,22 @@ function buildDomainQueries(companyName: string, domain: string, framework: Fram
     `site:${domain} policy`,
     `site:${domain}/investors`,
   ];
+
+  // AI-specific domain queries to find AI governance disclosures
+  const aiQueries = [
+    `site:${domain} responsible AI`,
+    `site:${domain} AI policy`,
+    `site:${domain} artificial intelligence`,
+    `site:${domain} AI ethics`,
+    `site:${domain} AI governance`,
+    `site:${domain} AI principles`,
+    `site:${domain} machine learning`,
+    `site:${domain} AI risk`,
+    `site:${domain} AI transparency`,
+    `site:${domain} data privacy AI`,
+  ];
+
+  return [...baseQueries, ...aiQueries];
 }
 
 function buildTrustedSourceQueries(companyName: string, sources: TrustedSource[]): string[] {

@@ -2,6 +2,7 @@ import axios from "axios";
 import * as cheerio from "cheerio";
 import pdfParse from "pdf-parse";
 import crypto from "crypto";
+import puppeteer from "puppeteer-core";
 
 const USER_AGENT =
   "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36";
@@ -108,6 +109,82 @@ async function extractTextFromPdf(buffer: Buffer): Promise<string> {
   }
 }
 
+// ─── Browser-Based Fetching (Puppeteer Fallback) ────────────────────────────
+
+const BROWSER_FETCH_TIMEOUT = 30000;
+
+async function fetchWithBrowser(url: string): Promise<string> {
+  let browser;
+  try {
+    const executablePath = process.env.PUPPETEER_EXECUTABLE_PATH || "/usr/bin/chromium";
+    browser = await puppeteer.launch({
+      executablePath,
+      headless: true,
+      args: [
+        "--no-sandbox",
+        "--disable-setuid-sandbox",
+        "--disable-dev-shm-usage",
+        "--disable-gpu",
+        "--single-process",
+      ],
+    });
+
+    const page = await browser.newPage();
+    await page.setUserAgent(USER_AGENT);
+    await page.setViewport({ width: 1280, height: 800 });
+
+    // Block unnecessary resources to speed up loading
+    await page.setRequestInterception(true);
+    page.on("request", (req) => {
+      const resourceType = req.resourceType();
+      if (["image", "media", "font", "stylesheet"].includes(resourceType)) {
+        req.abort();
+      } else {
+        req.continue();
+      }
+    });
+
+    await page.goto(url, {
+      waitUntil: "networkidle2",
+      timeout: BROWSER_FETCH_TIMEOUT,
+    });
+
+    // Wait a moment for any JS-rendered content
+    await new Promise((resolve) => setTimeout(resolve, 2000));
+
+    // Extract text content from the page
+    const content = await page.evaluate(() => {
+      // Remove noise elements
+      const removeSelectors = [
+        "script", "style", "nav", "footer", "header", "aside",
+        ".cookie-banner", ".nav", ".footer", ".sidebar",
+        "[role='navigation']", "[role='banner']"
+      ];
+      removeSelectors.forEach((sel) => {
+        document.querySelectorAll(sel).forEach((el) => el.remove());
+      });
+
+      // Prefer main content areas
+      const mainEl = document.querySelector("main, article, [role='main']");
+      const targetEl = mainEl || document.body;
+      return targetEl?.textContent?.replace(/\s+/g, " ").trim() || "";
+    });
+
+    return content;
+  } catch (error: any) {
+    console.warn(`[Processor] Browser fetch failed for ${url}: ${error.message}`);
+    return "";
+  } finally {
+    if (browser) {
+      try {
+        await browser.close();
+      } catch (e) {
+        // Ignore close errors
+      }
+    }
+  }
+}
+
 // ─── Main Process Document Function ──────────────────────────────────────────
 
 export async function processDocument(
@@ -125,14 +202,20 @@ export async function processDocument(
       const { data } = await fetchWithRetry(url, { responseType: "arraybuffer" });
       content = await extractTextFromPdf(Buffer.from(data));
     } else {
-      const { data, contentType } = await fetchWithRetry(url);
+      try {
+        const { data, contentType } = await fetchWithRetry(url);
 
-      // Check if response is actually a PDF
-      if (contentType.includes("application/pdf")) {
-        const { data: pdfData } = await fetchWithRetry(url, { responseType: "arraybuffer" });
-        content = await extractTextFromPdf(Buffer.from(pdfData));
-      } else {
-        content = extractTextFromHtml(data);
+        // Check if response is actually a PDF
+        if (contentType.includes("application/pdf")) {
+          const { data: pdfData } = await fetchWithRetry(url, { responseType: "arraybuffer" });
+          content = await extractTextFromPdf(Buffer.from(pdfData));
+        } else {
+          content = extractTextFromHtml(data);
+        }
+      } catch (httpError: any) {
+        // HTTP fetch failed (likely WAF/403/timeout) — try browser fallback
+        console.log(`[Processor] HTTP fetch failed for ${url} (${httpError.message}), trying browser fallback...`);
+        content = await fetchWithBrowser(url);
       }
     }
 
@@ -143,6 +226,16 @@ export async function processDocument(
     return content;
   } catch (error: any) {
     console.warn(`[Processor] Failed to process ${url}: ${error.message}`);
+    // Final fallback: try browser for any remaining failures
+    try {
+      const browserContent = await fetchWithBrowser(url);
+      if (browserContent) {
+        setCachedContent(url, browserContent);
+        return browserContent;
+      }
+    } catch (e) {
+      // Ignore
+    }
     return "";
   }
 }
