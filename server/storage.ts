@@ -667,6 +667,10 @@ export class Storage {
       });
   }
 
+  async clearSummaryCacheForCompany(companyId: number): Promise<void> {
+    await db.delete(summaryCache).where(eq(summaryCache.companyId, companyId));
+  }
+
   // ─── Snapshots ─────────────────────────────────────────────────────────────────
 
   async createSnapshot(data: {
@@ -741,8 +745,9 @@ export class Storage {
   // ─── Reset / Clear Results ──────────────────────────────────────────────────
 
   async resetCompany(companyId: number): Promise<void> {
-    // Clear scores, summary, and reset status
+    // Clear scores, summary, summary cache, and reset status
     await db.delete(measureScores).where(eq(measureScores.companyId, companyId));
+    await db.delete(summaryCache).where(eq(summaryCache.companyId, companyId));
     await db
       .update(companies)
       .set({

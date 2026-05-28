@@ -1,6 +1,6 @@
 import { storage } from "../storage.js";
 import { completeWithFallback, getProvider, getIndependentTieBreakerProvider } from "./ai-providers.js";
-import { buildEvidencePacksForCategory, chunkText } from "./passage-retrieval.js";
+import { buildEvidencePacksForCategory, chunkText, tokenize, buildBM25Index, bm25Score } from "./passage-retrieval.js";
 import { discoverCompanyTerminology, flattenTerms, type TerminologyMap } from "./terminology-discovery.js";
 import { generateDocumentHash } from "./processor.js";
 import type { Framework, FrameworkMeasure } from "../../shared/schema.js";
@@ -288,28 +288,93 @@ async function summarizeDocuments(opts: {
     return { text: cached, model: "cached" };
   }
 
-  // Combine and cap documents
+  // ─── PRIORITY-BASED DOCUMENT ORDERING ───────────────────────────────────────
+  // Sort documents by relevance to the topic BEFORE combining, so AI-specific
+  // content appears first and doesn't get truncated.
+  const topicKeywords = tokenize(topicDescription);
+  const aiKeywords = [
+    "ai", "artificial", "intelligence", "ethics", "responsible", "governance",
+    "transparency", "accountability", "risk", "bias", "fairness", "privacy",
+    "workforce", "training", "security", "algorithm", "machine", "learning",
+    "automated", "decision", "oversight", "committee", "policy", "framework",
+  ];
+  const allQueryTerms = [...new Set([...topicKeywords, ...aiKeywords])];
+
+  // Score each document by keyword density
+  interface DocEntry { text: string; url: string; score: number; idx: number }
+  const docEntries: DocEntry[] = documentTexts.map((text, idx) => {
+    const lower = text.toLowerCase();
+    let score = 0;
+    for (const term of allQueryTerms) {
+      // Count occurrences (capped at 10 per term to avoid over-weighting)
+      const regex = new RegExp(`\\b${term}\\b`, "gi");
+      const matches = lower.match(regex);
+      score += Math.min(matches?.length || 0, 10);
+    }
+    // Boost documents from the company's own domain or with AI in URL
+    const url = documentUrls[idx] || "";
+    if (/ai|ethics|responsible|governance|policy/i.test(url)) score += 50;
+    return { text, url, score, idx };
+  });
+
+  // Sort by relevance score descending
+  docEntries.sort((a, b) => b.score - a.score);
+
+  console.log(`[${companyName}] Document priority ordering (top 5):`);
+  for (const d of docEntries.slice(0, 5)) {
+    console.log(`  score=${d.score} ${d.url.slice(0, 60)}`);
+  }
+
+  // Combine documents in priority order with caps
   const RAW_PASS_CAP_DEFAULT = 120000;
   const RAW_PASS_CAP_PROXY = 200000;
 
   let combined = "";
-  for (let i = 0; i < documentTexts.length; i++) {
-    const text = documentTexts[i];
-    const url = documentUrls[i] || "";
-    const isProxy = /proxy|def.?14a|annual.?report|20-f|40-f/i.test(url);
+  for (const entry of docEntries) {
+    const isProxy = /proxy|def.?14a|annual.?report|20-f|40-f/i.test(entry.url);
     const cap = isProxy ? RAW_PASS_CAP_PROXY : RAW_PASS_CAP_DEFAULT;
-    combined += `\n\n--- DOCUMENT: ${url} ---\n\n` + text.slice(0, cap);
+    combined += `\n\n--- DOCUMENT: ${entry.url} ---\n\n` + entry.text.slice(0, cap);
   }
 
-  // If total is small enough, skip summarization
+  // If total is small enough, skip summarization and use BM25 directly
   if (combined.length < 600000) {
     return { text: combined, model: "raw-pass" };
   }
 
+  // ─── TWO-PASS APPROACH: BM25 pre-filter + LLM summarization ─────────────────
+  // Instead of naively truncating to 120K chars, use BM25 to extract the most
+  // relevant passages from the full corpus, then summarize those.
+  const chunks = chunkText(combined);
+  const bm25Index = buildBM25Index(chunks);
+  
+  // Score all chunks against topic keywords
+  const scoredChunks = chunks.map((chunk, idx) => ({
+    idx,
+    score: bm25Score(allQueryTerms, idx, bm25Index),
+    text: chunk,
+  }));
+  scoredChunks.sort((a, b) => b.score - a.score);
+
+  // Take top chunks up to 200K chars (much more than before)
+  const MAX_SUMMARIZATION_INPUT = 200000;
+  let relevantText = "";
+  for (const chunk of scoredChunks) {
+    if (chunk.score <= 0) break;
+    if (relevantText.length + chunk.text.length > MAX_SUMMARIZATION_INPUT) break;
+    relevantText += chunk.text + "\n\n";
+  }
+
+  // Fallback: if BM25 found very little, use first 200K of priority-sorted combined
+  if (relevantText.length < 20000) {
+    relevantText = combined.slice(0, MAX_SUMMARIZATION_INPUT);
+  }
+
+  console.log(`[${companyName}] Summarization input: ${relevantText.length} chars (BM25-filtered from ${combined.length} total)`);
+
   // Summarize with cheap LLM
   const { text: summary, provider } = await completeWithFallback("deepseek", {
     system: `You are a document summarizer. Extract all content relevant to: ${topicDescription}. Preserve verbatim quotes, specific names, dates, committee names, and policy titles. Do not add interpretation.`,
-    prompt: `Summarize the following corporate documents for ${companyName}, focusing on content relevant to ${topicDescription}. Preserve all specific details, names, quotes, and evidence.\n\n${combined.slice(0, 120000)}`,
+    prompt: `Summarize the following corporate documents for ${companyName}, focusing on content relevant to ${topicDescription}. Preserve all specific details, names, quotes, and evidence.\n\n${relevantText}`,
     maxTokens: 16000,
   });
 

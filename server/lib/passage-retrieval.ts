@@ -4,7 +4,7 @@ import { flattenTerms } from "./terminology-discovery.js";
 
 // ─── BM25 Implementation ─────────────────────────────────────────────────────
 
-interface BM25Index {
+export interface BM25Index {
   documents: string[];
   docFreqs: Map<string, number>;
   docLengths: number[];
@@ -12,7 +12,7 @@ interface BM25Index {
   totalDocs: number;
 }
 
-function tokenize(text: string): string[] {
+export function tokenize(text: string): string[] {
   return text
     .toLowerCase()
     .replace(/[^\w\s]/g, " ")
@@ -20,7 +20,7 @@ function tokenize(text: string): string[] {
     .filter((t) => t.length > 2);
 }
 
-function buildBM25Index(chunks: string[]): BM25Index {
+export function buildBM25Index(chunks: string[]): BM25Index {
   const docFreqs = new Map<string, number>();
   const docLengths: number[] = [];
   let totalLength = 0;
@@ -48,7 +48,7 @@ function buildBM25Index(chunks: string[]): BM25Index {
   };
 }
 
-function bm25Score(
+export function bm25Score(
   query: string[],
   docIndex: number,
   index: BM25Index,
