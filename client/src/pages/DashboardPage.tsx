@@ -125,14 +125,23 @@ export default function DashboardPage() {
     analyzeAllMutation.mutate(opts);
   };
 
-  const handleResetList = () => {
-    if (!selectedListId) {
-      alert("Please select a company list to reset.");
-      return;
-    }
-    const listName = companyLists.find((l: any) => l.id === selectedListId)?.name || "this list";
-    if (confirm(`Reset all companies in "${listName}"? This will clear their scores and analysis status.`)) {
-      resetListMutation.mutate(selectedListId);
+  const resetAllMutation = useMutation({
+    mutationFn: () => api.resetAll(),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["companies"] });
+    },
+  });
+
+  const handleReset = () => {
+    if (selectedListId) {
+      const listName = companyLists.find((l: any) => l.id === selectedListId)?.name || "this list";
+      if (confirm(`Reset all companies in "${listName}"? This will clear their scores and analysis status.`)) {
+        resetListMutation.mutate(selectedListId);
+      }
+    } else {
+      if (confirm(`Reset ALL ${companies.length} companies? This will clear all scores and analysis status.`)) {
+        resetAllMutation.mutate();
+      }
     }
   };
 
@@ -243,12 +252,12 @@ export default function DashboardPage() {
               <Play className="w-4 h-4" /> Analyze
             </button>
             <button
-              onClick={handleResetList}
-              disabled={!selectedListId || batchStatus?.running}
+              onClick={handleReset}
+              disabled={batchStatus?.running || companies.length === 0}
               className="flex items-center gap-1 px-3 py-2 text-sm bg-amber-50 border border-amber-300 text-amber-700 rounded-lg hover:bg-amber-100 disabled:opacity-50 disabled:cursor-not-allowed"
-              title="Reset all companies in selected list (clear scores)"
+              title={selectedListId ? "Reset all companies in selected list (clear scores)" : "Reset all companies (clear scores)"}
             >
-              <RotateCcw className="w-4 h-4" /> Reset List
+              <RotateCcw className="w-4 h-4" /> {selectedListId ? "Reset List" : "Reset All"}
             </button>
           </div>
         </div>

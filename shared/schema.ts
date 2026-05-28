@@ -390,3 +390,50 @@ export const companyLists = pgTable("company_lists", {
 
 export type CompanyList = typeof companyLists.$inferSelect;
 export type InsertCompanyList = typeof companyLists.$inferInsert;
+
+// ─── Analysis Results (Saved Completed Analyses) ────────────────────────────
+// Each row represents a completed batch analysis run.
+// Stores the template used, company list, date/time, and full results data.
+
+export const analysisResults = pgTable(
+  "analysis_results",
+  {
+    id: serial("id").primaryKey(),
+    frameworkId: integer("framework_id").references(() => frameworks.id),
+    frameworkName: text("framework_name").notNull(),
+    listId: integer("list_id"),
+    listName: text("list_name"),
+    batchId: integer("batch_id").references(() => batchRuns.id),
+    companyCount: integer("company_count").notNull(),
+    averageScore: integer("average_score"),
+    // Full results data: array of { companyId, companyName, score, measureScores, summary }
+    resultsData: jsonb("results_data").$type<Array<{
+      companyId: number;
+      companyName: string;
+      isin?: string;
+      sector?: string;
+      country?: string;
+      totalScore: number;
+      summary?: string;
+      measureScores: Array<{
+        measureId: string;
+        title: string;
+        category: string;
+        score: number;
+        verdict?: string;
+        evidenceSummary?: string;
+      }>;
+    }>>().notNull(),
+    // Share token for public JSON access
+    shareToken: text("share_token"),
+    completedAt: timestamp("completed_at").defaultNow().notNull(),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+  },
+  (table) => ({
+    completedAtIdx: index("analysis_results_completed_at_idx").on(table.completedAt),
+    shareTokenIdx: uniqueIndex("analysis_results_share_token_idx").on(table.shareToken),
+  })
+);
+
+export type AnalysisResult = typeof analysisResults.$inferSelect;
+export type InsertAnalysisResult = typeof analysisResults.$inferInsert;

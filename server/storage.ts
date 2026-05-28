@@ -15,6 +15,7 @@ import {
   snapshots,
   trustedSources,
   companyLists,
+  analysisResults,
   type Company,
   type InsertCompany,
   type Framework,
@@ -31,8 +32,11 @@ import {
   type CompanyTerminology,
   type SummaryCache,
   type Snapshot,
-  type TrustedSource,
   type CompanyList,
+  type InsertCompanyList,
+  type TrustedSource,
+  type AnalysisResult,
+  type InsertAnalysisResult,
 } from "../shared/schema.js";
 
 export class Storage {
@@ -763,6 +767,53 @@ export class Storage {
       })
       .where(inArray(companies.id, companyIds));
     return companyIds.length;
+  }
+
+  // ─── Analysis Results (Saved Completed Analyses) ──────────────────────────────
+
+  async getAnalysisResults(): Promise<AnalysisResult[]> {
+    return db
+      .select()
+      .from(analysisResults)
+      .orderBy(desc(analysisResults.completedAt));
+  }
+
+  async getAnalysisResult(id: number): Promise<AnalysisResult | undefined> {
+    const [result] = await db
+      .select()
+      .from(analysisResults)
+      .where(eq(analysisResults.id, id));
+    return result;
+  }
+
+  async getAnalysisResultByShareToken(token: string): Promise<AnalysisResult | undefined> {
+    const [result] = await db
+      .select()
+      .from(analysisResults)
+      .where(eq(analysisResults.shareToken, token));
+    return result;
+  }
+
+  async createAnalysisResult(data: {
+    frameworkId: number;
+    frameworkName: string;
+    listId?: number;
+    listName?: string;
+    batchId?: number;
+    companyCount: number;
+    averageScore?: number;
+    resultsData: any;
+    shareToken: string;
+  }): Promise<AnalysisResult> {
+    const [result] = await db
+      .insert(analysisResults)
+      .values(data)
+      .returning();
+    return result;
+  }
+
+  async deleteAnalysisResult(id: number): Promise<void> {
+    await db.delete(analysisResults).where(eq(analysisResults.id, id));
   }
 }
 

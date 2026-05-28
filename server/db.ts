@@ -225,6 +225,24 @@ export async function runStartupMigrations(): Promise<void> {
       DROP INDEX IF EXISTS documents_company_framework_url_unique;
       -- Create new unique index (idempotent)
       CREATE UNIQUE INDEX IF NOT EXISTS documents_company_url_unique ON documents(company_id, url);
+
+      -- Analysis Results (saved completed analyses)
+      CREATE TABLE IF NOT EXISTS analysis_results (
+        id SERIAL PRIMARY KEY,
+        framework_id INTEGER REFERENCES frameworks(id),
+        framework_name TEXT NOT NULL,
+        list_id INTEGER,
+        list_name TEXT,
+        batch_id INTEGER REFERENCES batch_runs(id),
+        company_count INTEGER NOT NULL,
+        average_score INTEGER,
+        results_data JSONB NOT NULL,
+        share_token TEXT,
+        completed_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      );
+      CREATE INDEX IF NOT EXISTS analysis_results_completed_at_idx ON analysis_results(completed_at);
+      CREATE UNIQUE INDEX IF NOT EXISTS analysis_results_share_token_idx ON analysis_results(share_token);
     `);
 
     console.log("[DB] Startup migrations completed successfully");

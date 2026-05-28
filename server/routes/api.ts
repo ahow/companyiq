@@ -299,6 +299,18 @@ router.post("/company-lists/:id/reset", async (req: Request, res: Response) => {
   }
 });
 
+// Reset ALL companies
+router.post("/companies/reset-all", async (req: Request, res: Response) => {
+  try {
+    const companies = await storage.getCompanies();
+    const allIds = companies.map(c => c.id);
+    const resetCount = await storage.resetCompanies(allIds);
+    res.json({ success: true, resetCount });
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
 // ─── Analyze ─────────────────────────────────────────────────────────────────
 
 // Path A: Single company full analysis (fetch + analyze)
@@ -854,6 +866,116 @@ router.post("/companies/:id/refresh-terminology", async (req: Request, res: Resp
 
     // The next analysis run will re-discover terminology
     res.json({ success: true, message: "Terminology will be refreshed on next analysis" });
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// ─── Analysis Results (Saved Completed Analyses) ──────────────────────────────────
+
+// List all saved analysis results
+router.get("/analysis-results", async (req: Request, res: Response) => {
+  try {
+    const results = await storage.getAnalysisResults();
+    // Return without the full resultsData to keep response small
+    const summary = results.map(r => ({
+      id: r.id,
+      frameworkId: r.frameworkId,
+      frameworkName: r.frameworkName,
+      listId: r.listId,
+      listName: r.listName,
+      batchId: r.batchId,
+      companyCount: r.companyCount,
+      averageScore: r.averageScore,
+      shareToken: r.shareToken,
+      completedAt: r.completedAt,
+      createdAt: r.createdAt,
+    }));
+    res.json(summary);
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Get a single analysis result (full data)
+router.get("/analysis-results/:id", async (req: Request, res: Response) => {
+  try {
+    const result = await storage.getAnalysisResult(parseInt(req.params.id));
+    if (!result) return res.status(404).json({ error: "Analysis result not found" });
+    res.json(result);
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Delete an analysis result
+router.delete("/analysis-results/:id", async (req: Request, res: Response) => {
+  try {
+    await storage.deleteAnalysisResult(parseInt(req.params.id));
+    res.json({ success: true });
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Download analysis result as CSV spreadsheet
+router.get("/analysis-results/:id/download", async (req: Request, res: Response) => {
+  try {
+    const result = await storage.getAnalysisResult(parseInt(req.params.id));
+    if (!result) return res.status(404).json({ error: "Analysis result not found" });
+
+    const data = result.resultsData as any[];
+    if (!data || data.length === 0) {
+      return res.status(400).json({ error: "No results data" });
+    }
+
+    // Get all unique measure IDs from the first company
+    const measureIds = data[0]?.measureScores?.map((m: any) => m.measureId) || [];
+    const measureTitles = data[0]?.measureScores?.map((m: any) => m.title) || [];
+
+    // Build CSV header
+    let csv = `"Company","ISIN","Sector","Country","Total Score (%)","Summary"`;
+    for (const title of measureTitles) {
+      csv += `,"${title} (Score)","${title} (Verdict)","${title} (Evidence)"`;
+    }
+    csv += "\n";
+
+    // Build CSV rows
+    for (const company of data) {
+      csv += `"${company.companyName}","${company.isin || ""}","${company.sector || ""}","${company.country || ""}",${company.totalScore},"${(company.summary || "").replace(/"/g, '""').slice(0, 500)}"`;
+      for (const measureId of measureIds) {
+        const score = company.measureScores?.find((m: any) => m.measureId === measureId);
+        if (score) {
+          csv += `,${score.score},"${score.verdict || ""}","${(score.evidenceSummary || "").replace(/"/g, '""').slice(0, 300)}"`;
+        } else {
+          csv += `,0,"",""`;
+        }
+      }
+      csv += "\n";
+    }
+
+    const filename = `${result.frameworkName.replace(/[^a-zA-Z0-9]/g, "_")}_${result.listName || "All"}_${new Date(result.completedAt).toISOString().slice(0, 10)}.csv`;
+    res.setHeader("Content-Type", "text/csv");
+    res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
+    res.send(csv);
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Public share endpoint (no auth required) - returns JSON
+router.get("/share/:token", async (req: Request, res: Response) => {
+  try {
+    const result = await storage.getAnalysisResultByShareToken(req.params.token);
+    if (!result) return res.status(404).json({ error: "Shared result not found" });
+    res.json({
+      frameworkName: result.frameworkName,
+      listName: result.listName,
+      companyCount: result.companyCount,
+      averageScore: result.averageScore,
+      completedAt: result.completedAt,
+      results: result.resultsData,
+    });
   } catch (error: any) {
     res.status(500).json({ error: error.message });
   }

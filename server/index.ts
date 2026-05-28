@@ -49,6 +49,8 @@ app.use((req, res, next) => {
   // Allow login endpoint
   if (req.path === "/api/login") return next();
   if (req.path === "/api/health") return next();
+  // Allow public share endpoint (no auth required)
+  if (req.path.startsWith("/api/share/")) return next();
 
   // Allow static assets
   if (req.path.startsWith("/assets/") || req.path === "/favicon.ico") return next();
@@ -154,6 +156,8 @@ async function executeJob(job: any): Promise<void> {
         if (batch.completedJobs + batch.failedJobs >= batch.totalJobs) {
           await storage.completeBatchRun(batch.id);
           console.log(`[${WORKER_ID}] Batch ${batch.id} completed`);
+          // Auto-save analysis results
+          await saveAnalysisResults(batch.id, job.frameworkId!);
         }
       }
       console.log(`[${WORKER_ID}] Job ${job.id} completed (${job.companyName}: ${result.analysis?.scorePercentage}%)`);
@@ -167,10 +171,91 @@ async function executeJob(job: any): Promise<void> {
       const batch = await storage.incrementBatchFailed(job.batchId);
       if (batch.completedJobs + batch.failedJobs >= batch.totalJobs) {
         await storage.completeBatchRun(batch.id);
+        // Auto-save analysis results even if some failed
+        await saveAnalysisResults(batch.id, job.frameworkId!);
       }
     }
   } finally {
     activeJobs--;
+  }
+}
+
+async function saveAnalysisResults(batchId: number, frameworkId: number): Promise<void> {
+  try {
+    const framework = await storage.getFramework(frameworkId);
+    if (!framework) return;
+
+    // Get all completed companies from this batch's jobs
+    const { db } = await import("./db.js");
+    const { sql } = await import("drizzle-orm");
+    const jobsResult = await db.execute(sql`
+      SELECT company_id, company_name FROM analysis_jobs
+      WHERE batch_id = ${batchId} AND status = 'completed'
+    `);
+
+    const completedCompanyIds = jobsResult.rows.map((r: any) => r.company_id);
+    if (completedCompanyIds.length === 0) return;
+
+    // Gather results for each completed company
+    const resultsData: any[] = [];
+    for (const row of jobsResult.rows as any[]) {
+      const company = await storage.getCompany(row.company_id);
+      if (!company) continue;
+
+      const scores = await storage.getMeasureScores(company.id);
+      resultsData.push({
+        companyId: company.id,
+        companyName: company.name,
+        isin: company.isin || undefined,
+        sector: company.sector || undefined,
+        country: company.country || undefined,
+        totalScore: company.totalScore || 0,
+        summary: company.summary || undefined,
+        measureScores: scores.map(s => ({
+          measureId: s.measureId,
+          title: s.title || "",
+          category: s.category || "",
+          score: s.score,
+          verdict: s.verdict || undefined,
+          evidenceSummary: s.evidenceSummary || undefined,
+        })),
+      });
+    }
+
+    // Determine which list was used (check if all companies belong to one list)
+    const lists = await storage.getCompanyLists();
+    let listId: number | undefined;
+    let listName: string | undefined;
+    for (const list of lists) {
+      const listCompanyIds = (list.companyIds || []) as number[];
+      if (completedCompanyIds.every((id: number) => listCompanyIds.includes(id))) {
+        listId = list.id;
+        listName = list.name;
+        break;
+      }
+    }
+
+    const avgScore = resultsData.length > 0
+      ? Math.round(resultsData.reduce((sum, r) => sum + r.totalScore, 0) / resultsData.length)
+      : 0;
+
+    const shareToken = crypto.randomUUID();
+
+    await storage.createAnalysisResult({
+      frameworkId: framework.id,
+      frameworkName: framework.name,
+      listId,
+      listName,
+      batchId,
+      companyCount: resultsData.length,
+      averageScore: avgScore,
+      resultsData,
+      shareToken,
+    });
+
+    console.log(`[${WORKER_ID}] Saved analysis results for batch ${batchId} (${resultsData.length} companies, avg ${avgScore}%)`);
+  } catch (error: any) {
+    console.error(`[${WORKER_ID}] Failed to save analysis results:`, error.message);
   }
 }
 

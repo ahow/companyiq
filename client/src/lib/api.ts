@@ -50,6 +50,7 @@ export const api = {
   // Reset
   resetCompany: (id: number) => request(`/companies/${id}/reset`, { method: "POST" }),
   resetCompanyList: (listId: number) => request(`/company-lists/${listId}/reset`, { method: "POST" }),
+  resetAll: () => request("/companies/reset-all", { method: "POST" }),
 
   // Frameworks
   getFrameworks: () => request("/frameworks"),
@@ -105,6 +106,13 @@ export const api = {
     }
     return res.json();
   },
+
+  // Analysis Results
+  getAnalysisResults: () => request("/analysis-results"),
+  getAnalysisResult: (id: number) => request(`/analysis-results/${id}`),
+  deleteAnalysisResult: (id: number) => request(`/analysis-results/${id}`, { method: "DELETE" }),
+  getAnalysisResultDownloadUrl: (id: number) => `${BASE}/analysis-results/${id}/download`,
+  getShareUrl: (token: string) => `${window.location.origin}${BASE}/share/${token}`,
 
   // Document upload
   uploadDocument: async (companyId: number, file: File) => {
