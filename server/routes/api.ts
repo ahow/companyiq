@@ -44,8 +44,12 @@ router.get("/debug/jobs", async (req: Request, res: Response) => {
       SELECT status, COUNT(*) as count FROM analysis_jobs GROUP BY status
     `);
     const total = await db.execute(sql`SELECT COUNT(*) as count FROM analysis_jobs`);
-    const sample = await db.execute(sql`SELECT id, company_id, status, worker_id, error, attempts FROM analysis_jobs LIMIT 5`);
-    res.json({ statusCounts: counts.rows, totalJobs: total.rows[0], sampleJobs: sample.rows });
+    const sample = await db.execute(sql`SELECT * FROM analysis_jobs LIMIT 3`);
+    const schema = await db.execute(sql`
+      SELECT column_name, data_type FROM information_schema.columns 
+      WHERE table_name = 'analysis_jobs' ORDER BY ordinal_position
+    `);
+    res.json({ statusCounts: counts.rows, totalJobs: total.rows[0], sampleJobs: sample.rows, schema: schema.rows });
   } catch (error: any) {
     res.status(500).json({ error: error.message });
   }
