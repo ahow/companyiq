@@ -217,6 +217,20 @@ export class Storage {
       .orderBy(asc(documents.firstSeenAt), asc(documents.url));
   }
 
+  async clearDiscoveredDocuments(companyId: number, frameworkId: number): Promise<void> {
+    // Delete all non-user-uploaded documents for this company/framework
+    // This ensures stale discovery results don't pollute re-analysis
+    await db
+      .delete(documents)
+      .where(
+        and(
+          eq(documents.companyId, companyId),
+          eq(documents.frameworkId, frameworkId),
+          eq(documents.userUploaded, false)
+        )
+      );
+  }
+
   async recordFetchSuccess(companyId: number, frameworkId: number, url: string, content: string): Promise<void> {
     await db
       .update(documents)

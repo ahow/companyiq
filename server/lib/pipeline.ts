@@ -40,6 +40,11 @@ export async function runAnalysisPipeline(opts: PipelineOptions): Promise<Pipeli
       return { success: false, error: "Cancelled", documentsProcessed: 0, documentsFresh: 0, documentsCached: 0 };
     }
 
+    // ─── Stage 0: Clear stale discovery cache ───────────────────────────────
+    // On re-analysis, purge old discovered documents so irrelevant cached docs
+    // from previous runs don't pollute the document list.
+    await storage.clearDiscoveredDocuments(companyId, frameworkId);
+
     // ─── Stage 1: Discovery ──────────────────────────────────────────────────
 
     const trustedSources = await storage.getTrustedSources();
@@ -57,7 +62,7 @@ export async function runAnalysisPipeline(opts: PipelineOptions): Promise<Pipeli
       trustedSources,
     });
 
-    // Persist discovery results to documents table (monotonic additive cache)
+    // Persist fresh discovery results to documents table
     for (const doc of discoveryResult.documents) {
       await storage.upsertDiscoveredDocument({
         companyId,
@@ -70,40 +75,21 @@ export async function runAnalysisPipeline(opts: PipelineOptions): Promise<Pipeli
       });
     }
 
-    // Union fresh discovery with cached accepted documents
-    const cachedDocs = await storage.getCachedAcceptedDocuments(companyId, frameworkId);
-    const allDocUrls = new Set<string>();
-    const finalDocs: Array<{ url: string; title: string | null; type: string }> = [];
+    // Build the document list from fresh discovery only (no stale cache)
+    // Sort by discovery priority (lower = better); pinned docs have priority -100
+    const sortedDocs = [...discoveryResult.documents].sort((a, b) => a.priority - b.priority);
 
-    for (const doc of cachedDocs) {
-      if (!allDocUrls.has(doc.url)) {
-        allDocUrls.add(doc.url);
-        finalDocs.push({ url: doc.url, title: doc.title, type: doc.type });
-      }
-    }
+    // Process ALL discovered documents (up to a generous cap of 40)
+    // More documents = better chance of finding evidence for each measure
+    const DOC_CAP = 40;
+    const docsToProcess = sortedDocs.slice(0, DOC_CAP).map(doc => ({
+      url: doc.url,
+      title: doc.title,
+      type: inferDocumentType(doc.url),
+      priority: doc.priority,
+    }));
 
-    // Also add fresh docs not yet in cache
-    for (const doc of discoveryResult.documents) {
-      if (!allDocUrls.has(doc.url)) {
-        allDocUrls.add(doc.url);
-        finalDocs.push({ url: doc.url, title: doc.title, type: inferDocumentType(doc.url) });
-      }
-    }
-
-    // Sort by discovery priority (lower = better) and cap at 20 documents
-    // Priority comes from the discovery ranking; pinned docs have priority -100
-    const priorityMap = new Map<string, number>();
-    for (const doc of discoveryResult.documents) {
-      priorityMap.set(doc.url, doc.priority);
-    }
-    finalDocs.sort((a, b) => {
-      const pa = priorityMap.get(a.url) ?? 50;
-      const pb = priorityMap.get(b.url) ?? 50;
-      return pa - pb;
-    });
-    const docsToProcess = finalDocs.slice(0, 20);
-
-    console.log(`[${companyName}] Processing ${docsToProcess.length} docs (${discoveryResult.documents.length} fresh + ${cachedDocs.length} from cache)`);
+    console.log(`[${companyName}] Processing ${docsToProcess.length} docs from ${discoveryResult.documents.length} discovered`);
 
     // Persist diagnostics
     await storage.updateCompany(companyId, {
@@ -121,7 +107,7 @@ export async function runAnalysisPipeline(opts: PipelineOptions): Promise<Pipeli
     const documentTexts: string[] = [];
     const documentUrls: string[] = [];
 
-    // Process documents SEQUENTIALLY to avoid R14 memory errors
+    // Process documents sequentially to manage memory
     for (const doc of docsToProcess) {
       if (cancelCheck?.()) break;
 
@@ -144,7 +130,7 @@ export async function runAnalysisPipeline(opts: PipelineOptions): Promise<Pipeli
       throw new Error("No documents could be processed");
     }
 
-    console.log(`[${companyName}] Successfully processed ${documentTexts.length} documents`);
+    console.log(`[${companyName}] Successfully processed ${documentTexts.length}/${docsToProcess.length} documents`);
 
     if (cancelCheck?.()) {
       await storage.updateCompany(companyId, { analysisStatus: "idle" });
@@ -179,7 +165,7 @@ export async function runAnalysisPipeline(opts: PipelineOptions): Promise<Pipeli
         error: "Analysis returned no meaningful results (0%-guard)",
         documentsProcessed: documentTexts.length,
         documentsFresh: discoveryResult.documents.length,
-        documentsCached: cachedDocs.length,
+        documentsCached: 0,
       };
     }
 
@@ -222,7 +208,7 @@ export async function runAnalysisPipeline(opts: PipelineOptions): Promise<Pipeli
       analysis,
       documentsProcessed: documentTexts.length,
       documentsFresh: discoveryResult.documents.length,
-      documentsCached: cachedDocs.length,
+      documentsCached: 0,
     };
   } catch (error: any) {
     console.error(`[${companyName}] Pipeline error: ${error.message}`);
