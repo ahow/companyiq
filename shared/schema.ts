@@ -25,6 +25,7 @@ export const companies = pgTable(
     country: text("country"),
     totalScore: integer("total_score"),
     summary: text("summary"),
+    // Status: idle | fetching | fetched | analyzing | completed | failed
     analysisStatus: text("analysis_status").notNull().default("idle"),
     logoUrl: text("logo_url"),
     pinnedDocuments: jsonb("pinned_documents").$type<string[]>(),
@@ -111,7 +112,9 @@ export const selectFrameworkMeasureSchema = createSelectSchema(frameworkMeasures
 export type FrameworkMeasure = typeof frameworkMeasures.$inferSelect;
 export type InsertFrameworkMeasure = typeof frameworkMeasures.$inferInsert;
 
-// ─── Documents ───────────────────────────────────────────────────────────────
+// ─── Documents (Company-Level) ──────────────────────────────────────────────
+// Documents are stored at the COMPANY level, not framework-specific.
+// Once fetched, the same document content can be reused across multiple frameworks.
 
 export const documents = pgTable(
   "documents",
@@ -120,6 +123,7 @@ export const documents = pgTable(
     companyId: integer("company_id")
       .notNull()
       .references(() => companies.id, { onDelete: "cascade" }),
+    // frameworkId is kept for backward compat but is now nullable and not part of uniqueness
     frameworkId: integer("framework_id").references(() => frameworks.id),
     url: text("url").notNull(),
     title: text("title"),
@@ -139,8 +143,9 @@ export const documents = pgTable(
     gateVerdictAt: timestamp("gate_verdict_at"),
   },
   (table) => ({
-    companyFrameworkUrlUnique: uniqueIndex("documents_company_framework_url_unique")
-      .on(table.companyId, table.frameworkId, table.url),
+    // NEW: uniqueness is company_id + url (no framework)
+    companyUrlUnique: uniqueIndex("documents_company_url_unique")
+      .on(table.companyId, table.url),
     companyStatusIdx: index("documents_company_status_idx").on(
       table.companyId,
       table.fetchStatus

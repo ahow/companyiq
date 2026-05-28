@@ -1,5 +1,5 @@
 import { db } from "./db.js";
-import { eq, and, sql, desc, asc, inArray, isNull, ne } from "drizzle-orm";
+import { eq, and, sql, desc, asc, inArray, ne } from "drizzle-orm";
 import {
   companies,
   frameworks,
@@ -166,16 +166,18 @@ export class Storage {
     return db.insert(frameworkMeasures).values(measures).returning();
   }
 
-  // ─── Documents (Discovery Cache) ──────────────────────────────────────────────
+  // ─── Documents (Company-Level) ────────────────────────────────────────────────
+  // Documents are now stored at the COMPANY level (unique on company_id + url).
+  // Once fetched, the same document content is reused across any framework evaluation.
 
   async upsertDiscoveredDocument(data: {
     companyId: number;
-    frameworkId: number;
     url: string;
     title?: string;
     type: string;
     gateVerdict?: string;
     gateReason?: string;
+    frameworkId?: number; // optional, for backward compat only
   }): Promise<Document> {
     const [doc] = await db
       .insert(documents)
@@ -190,7 +192,7 @@ export class Storage {
         gateVerdictAt: data.gateVerdict ? new Date() : undefined,
       })
       .onConflictDoUpdate({
-        target: [documents.companyId, documents.frameworkId, documents.url],
+        target: [documents.companyId, documents.url],
         set: {
           lastSeenAt: new Date(),
           title: data.title || sql`${documents.title}`,
@@ -202,14 +204,13 @@ export class Storage {
     return doc;
   }
 
-  async getCachedAcceptedDocuments(companyId: number, frameworkId: number): Promise<Document[]> {
+  async getAcceptedDocuments(companyId: number): Promise<Document[]> {
     return db
       .select()
       .from(documents)
       .where(
         and(
           eq(documents.companyId, companyId),
-          eq(documents.frameworkId, frameworkId),
           eq(documents.gateVerdict, "accept"),
           ne(documents.fetchStatus, "dead")
         )
@@ -217,21 +218,47 @@ export class Storage {
       .orderBy(asc(documents.firstSeenAt), asc(documents.url));
   }
 
-  async clearDiscoveredDocuments(companyId: number, frameworkId: number): Promise<void> {
-    // Delete all non-user-uploaded documents for this company/framework
-    // This ensures stale discovery results don't pollute re-analysis
+  async getFetchedDocuments(companyId: number): Promise<Document[]> {
+    return db
+      .select()
+      .from(documents)
+      .where(
+        and(
+          eq(documents.companyId, companyId),
+          eq(documents.gateVerdict, "accept"),
+          eq(documents.fetchStatus, "ok")
+        )
+      )
+      .orderBy(asc(documents.firstSeenAt));
+  }
+
+  async getPendingDocuments(companyId: number): Promise<Document[]> {
+    return db
+      .select()
+      .from(documents)
+      .where(
+        and(
+          eq(documents.companyId, companyId),
+          eq(documents.gateVerdict, "accept"),
+          eq(documents.fetchStatus, "pending")
+        )
+      )
+      .orderBy(asc(documents.firstSeenAt));
+  }
+
+  async clearDiscoveredDocuments(companyId: number): Promise<void> {
+    // Delete all non-user-uploaded documents for this company
     await db
       .delete(documents)
       .where(
         and(
           eq(documents.companyId, companyId),
-          eq(documents.frameworkId, frameworkId),
           eq(documents.userUploaded, false)
         )
       );
   }
 
-  async recordFetchSuccess(companyId: number, frameworkId: number, url: string, content: string): Promise<void> {
+  async recordFetchSuccess(companyId: number, url: string, content: string): Promise<void> {
     await db
       .update(documents)
       .set({
@@ -244,13 +271,12 @@ export class Storage {
       .where(
         and(
           eq(documents.companyId, companyId),
-          eq(documents.frameworkId, frameworkId),
           eq(documents.url, url)
         )
       );
   }
 
-  async recordFetchFailure(companyId: number, frameworkId: number, url: string): Promise<void> {
+  async recordFetchFailure(companyId: number, url: string): Promise<void> {
     await db
       .update(documents)
       .set({
@@ -260,7 +286,6 @@ export class Storage {
       .where(
         and(
           eq(documents.companyId, companyId),
-          eq(documents.frameworkId, frameworkId),
           eq(documents.url, url)
         )
       );
@@ -268,7 +293,6 @@ export class Storage {
 
   async recordGateVerdict(
     companyId: number,
-    frameworkId: number,
     url: string,
     verdict: string,
     reason: string
@@ -283,7 +307,6 @@ export class Storage {
       .where(
         and(
           eq(documents.companyId, companyId),
-          eq(documents.frameworkId, frameworkId),
           eq(documents.url, url)
         )
       );
@@ -400,7 +423,6 @@ export class Storage {
     `);
     const row = result.rows[0];
     if (!row) return undefined;
-    // Map snake_case columns from raw SQL to camelCase AnalysisJob type
     return {
       id: row.id,
       companyId: row.company_id,
@@ -489,7 +511,6 @@ export class Storage {
       .update(batchRuns)
       .set({ status: "cancelled", completedAt: new Date() })
       .where(eq(batchRuns.id, batchId));
-    // Cancel pending jobs
     await db
       .update(analysisJobs)
       .set({ status: "failed", lastError: "Batch cancelled" })
@@ -548,7 +569,6 @@ export class Storage {
     details?: string;
   }): Promise<void> {
     await db.insert(processingErrors).values(data);
-    // Cleanup: keep only last 500
     await db.execute(sql`
       DELETE FROM processing_errors 
       WHERE id NOT IN (

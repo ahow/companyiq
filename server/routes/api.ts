@@ -243,9 +243,6 @@ router.post("/companies/:id/documents", upload.single("file"), async (req: Reque
     const companyId = parseInt(req.params.id);
     if (!req.file) return res.status(400).json({ error: "No file uploaded" });
 
-    const framework = await storage.getActiveFramework();
-    if (!framework) return res.status(400).json({ error: "No active framework" });
-
     // Extract content from uploaded PDF
     const pdfParse = (await import("pdf-parse")).default;
     const data = await pdfParse(req.file.buffer);
@@ -254,7 +251,6 @@ router.post("/companies/:id/documents", upload.single("file"), async (req: Reque
     const url = `upload://${req.file.originalname}`;
     await storage.upsertDiscoveredDocument({
       companyId,
-      frameworkId: framework.id,
       url,
       title: req.file.originalname,
       type: "pdf",
@@ -262,8 +258,8 @@ router.post("/companies/:id/documents", upload.single("file"), async (req: Reque
       gateReason: "user-uploaded",
     });
 
-    // Record content
-    await storage.recordFetchSuccess(companyId, framework.id, url, content);
+    // Record content (company-level, reusable across frameworks)
+    await storage.recordFetchSuccess(companyId, url, content);
 
     res.json({ success: true, filename: req.file.originalname, contentLength: content.length });
   } catch (error: any) {
@@ -273,7 +269,7 @@ router.post("/companies/:id/documents", upload.single("file"), async (req: Reque
 
 // ─── Analyze ─────────────────────────────────────────────────────────────────
 
-// Path A: Single company inline analysis
+// Path A: Single company full analysis (fetch + analyze)
 router.post("/companies/:id/analyze", async (req: Request, res: Response) => {
   try {
     const companyId = parseInt(req.params.id);
@@ -287,12 +283,55 @@ router.post("/companies/:id/analyze", async (req: Request, res: Response) => {
     const measures = await storage.getMeasuresForFramework(framework.id);
     if (measures.length === 0) return res.status(400).json({ error: "Framework has no measures" });
 
+    // Check if skipFetch was requested (reuse existing documents)
+    const skipFetch = req.body.skipFetch === true;
+
     // Return immediately, run in background
-    res.json({ status: "started", companyId, companyName: company.name });
+    res.json({ status: "started", companyId, companyName: company.name, skipFetch });
 
     // Run pipeline in background
-    runAnalysisPipeline({ company, framework, measures }).catch((err) => {
+    runAnalysisPipeline({ company, framework, measures, skipFetch }).catch((err) => {
       console.error(`[${company.name}] Background analysis failed:`, err);
+    });
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Path A2: Re-analyze with different framework (skip fetch, reuse cached docs)
+router.post("/companies/:id/re-analyze", async (req: Request, res: Response) => {
+  try {
+    const companyId = parseInt(req.params.id);
+    const company = await storage.getCompany(companyId);
+    if (!company) return res.status(404).json({ error: "Company not found" });
+
+    const framework = await storage.getActiveFramework();
+    if (!framework) return res.status(400).json({ error: "No active framework" });
+
+    const measures = await storage.getMeasuresForFramework(framework.id);
+    if (measures.length === 0) return res.status(400).json({ error: "Framework has no measures" });
+
+    // Check if company has fetched documents
+    const fetchedDocs = await storage.getFetchedDocuments(companyId);
+    if (fetchedDocs.length === 0) {
+      return res.status(400).json({ 
+        error: "No fetched documents available. Run a full analysis first to fetch documents.",
+        fetchedCount: 0,
+      });
+    }
+
+    // Return immediately, run analysis only (skip fetch)
+    res.json({ 
+      status: "started", 
+      companyId, 
+      companyName: company.name, 
+      skipFetch: true,
+      documentsAvailable: fetchedDocs.length,
+    });
+
+    // Run pipeline with skipFetch=true
+    runAnalysisPipeline({ company, framework, measures, skipFetch: true }).catch((err) => {
+      console.error(`[${company.name}] Re-analysis failed:`, err);
     });
   } catch (error: any) {
     res.status(500).json({ error: error.message });

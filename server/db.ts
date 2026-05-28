@@ -214,14 +214,17 @@ export async function runStartupMigrations(): Promise<void> {
       CREATE INDEX IF NOT EXISTS companies_name_idx ON companies(name);
       CREATE INDEX IF NOT EXISTS companies_status_idx ON companies(analysis_status);
       CREATE INDEX IF NOT EXISTS measures_framework_idx ON framework_measures(framework_id);
-      CREATE UNIQUE INDEX IF NOT EXISTS documents_company_framework_url_unique 
-        ON documents(company_id, framework_id, url);
       CREATE INDEX IF NOT EXISTS documents_company_status_idx ON documents(company_id, fetch_status);
       CREATE INDEX IF NOT EXISTS scores_company_measure_idx ON measure_scores(company_id, measure_id);
       CREATE INDEX IF NOT EXISTS scores_company_framework_idx ON measure_scores(company_id, framework_id);
       CREATE INDEX IF NOT EXISTS jobs_status_priority_idx ON analysis_jobs(status, priority, created_at);
       CREATE INDEX IF NOT EXISTS errors_created_at_idx ON processing_errors(created_at);
       CREATE INDEX IF NOT EXISTS snapshots_company_idx ON snapshots(company_id);
+
+      -- Migration: change documents unique index from (company_id, framework_id, url) to (company_id, url)
+      DROP INDEX IF EXISTS documents_company_framework_url_unique;
+      -- Create new unique index (idempotent)
+      CREATE UNIQUE INDEX IF NOT EXISTS documents_company_url_unique ON documents(company_id, url);
     `);
 
     console.log("[DB] Startup migrations completed successfully");

@@ -35,7 +35,9 @@ export const api = {
   createCompany: (data: any) => request("/companies", { method: "POST", body: JSON.stringify(data) }),
   updateCompany: (id: number, data: any) => request(`/companies/${id}`, { method: "PATCH", body: JSON.stringify(data) }),
   deleteCompany: (id: number) => request(`/companies/${id}`, { method: "DELETE" }),
-  analyzeCompany: (id: number) => request(`/companies/${id}/analyze`, { method: "POST" }),
+  analyzeCompany: (id: number, opts?: { skipFetch?: boolean }) => 
+    request(`/companies/${id}/analyze`, { method: "POST", body: JSON.stringify(opts || {}) }),
+  reAnalyzeCompany: (id: number) => request(`/companies/${id}/re-analyze`, { method: "POST" }),
   getCompanyTerminology: (id: number) => request(`/companies/${id}/terminology`),
 
   // Batch

@@ -66,7 +66,8 @@ export default function CompanyDetailPage() {
     setExpandedCategories(next);
   };
 
-  const isRunning = company.analysisStatus === "searching" || company.analysisStatus === "analyzing";
+  const isRunning = ["searching", "fetching", "fetched", "analyzing"].includes(company.analysisStatus);
+  const hasFetchedDocs = documents.some((d: any) => d.fetchStatus === "ok");
 
   return (
     <div className="space-y-6">
@@ -105,7 +106,7 @@ export default function CompanyDetailPage() {
             className="flex items-center gap-1 px-4 py-2 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50"
           >
             {isRunning ? <Loader2 className="w-4 h-4 animate-spin" /> : <Play className="w-4 h-4" />}
-            {isRunning ? "Running..." : "Analyze"}
+            {isRunning ? (company.analysisStatus === "fetching" ? "Fetching..." : "Analyzing...") : "Analyze"}
           </button>
           <input
             ref={fileInputRef}
