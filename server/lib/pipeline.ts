@@ -108,63 +108,66 @@ async function runFetchPhase(opts: {
     return { fetchedCount: 0, totalAccepted: discoveryResult.documents.length };
   }
 
-  // Step 4: Fetch ALL accepted documents
-  const acceptedDocs = await storage.getAcceptedDocuments(companyId);
-  const pendingDocs = acceptedDocs.filter((d) => d.fetchStatus === "pending");
-  const alreadyFetched = acceptedDocs.filter((d) => d.fetchStatus === "ok").length;
-
-  // Priority-sort pending docs: company domain first, then PDFs, then by discovery priority
+  // Step 4: Fetch ALL accepted documents — loop until EVERY doc is resolved (ok or dead)
+  // Analysis will NOT start until zero documents remain in "pending" status.
   const companyDomain = company.domain?.replace(/^www\./, "").toLowerCase() || "";
-  const sortedPending = [...pendingDocs].sort((a, b) => {
-    const aIsCompanyDomain = companyDomain && a.url.toLowerCase().includes(companyDomain) ? 1 : 0;
-    const bIsCompanyDomain = companyDomain && b.url.toLowerCase().includes(companyDomain) ? 1 : 0;
-    if (aIsCompanyDomain !== bIsCompanyDomain) return bIsCompanyDomain - aIsCompanyDomain;
-    // PDFs from company domain are highest priority
-    const aIsPdf = a.url.toLowerCase().endsWith(".pdf") ? 1 : 0;
-    const bIsPdf = b.url.toLowerCase().endsWith(".pdf") ? 1 : 0;
-    if (aIsPdf !== bIsPdf) return bIsPdf - aIsPdf;
-    return 0;
-  });
-
-  console.log(`[${companyName}] Fetching ${sortedPending.length} pending documents (${alreadyFetched} already cached)`);
 
   let newFetchCount = 0;
-  let failCount = 0;
+  let totalFetched = 0;
+  let pass = 0;
+  const MAX_PASSES = 4; // Each pass gives pending docs another attempt (3 failures = dead)
 
-  // NO time budget — fetch ALL documents as the user requires
-  for (const doc of sortedPending) {
+  while (true) {
+    pass++;
     if (cancelCheck?.()) break;
 
-    try {
-      const type = inferDocumentType(doc.url);
-      const content = await processDocument(doc.url, type);
+    // Re-read from DB each pass to get current state
+    const allDocs = await storage.getAcceptedDocuments(companyId);
+    const pendingDocs = allDocs.filter((d) => d.fetchStatus === "pending");
+    const okDocs = allDocs.filter((d) => d.fetchStatus === "ok");
+    const deadDocs = allDocs.filter((d) => d.fetchStatus === "dead");
 
-      if (content && content.length > 50) {
-        await storage.recordFetchSuccess(companyId, doc.url, content);
-        newFetchCount++;
-      } else {
-        await storage.recordFetchFailure(companyId, doc.url);
-        failCount++;
-      }
-    } catch (error: any) {
-      console.warn(`[${companyName}] Fetch failed for ${doc.url}: ${error.message}`);
-      await storage.recordFetchFailure(companyId, doc.url);
-      failCount++;
+    totalFetched = okDocs.length;
+
+    // EXIT CONDITION: No more pending documents — all are resolved
+    if (pendingDocs.length === 0) {
+      console.log(`[${companyName}] All documents resolved: ${okDocs.length} ok, ${deadDocs.length} dead`);
+      break;
     }
-  }
 
-  console.log(`[${companyName}] Fetch attempts complete: ${newFetchCount} succeeded, ${failCount} failed`);
+    // Safety: don't loop forever if something is wrong
+    if (pass > MAX_PASSES) {
+      console.warn(`[${companyName}] Max fetch passes (${MAX_PASSES}) reached. ${pendingDocs.length} docs still pending — marking as dead.`);
+      // Force-mark remaining pending docs as dead
+      for (const doc of pendingDocs) {
+        await storage.recordFetchFailure(companyId, doc.url);
+        await storage.recordFetchFailure(companyId, doc.url);
+        await storage.recordFetchFailure(companyId, doc.url);
+      }
+      break;
+    }
 
-  // Retry docs that failed once (give them a second chance with different timing)
-  const retryDocs = await storage.getAcceptedDocuments(companyId);
-  const retryable = retryDocs.filter((d) => d.fetchStatus === "pending" && (d.fetchFailureCount || 0) === 1);
-  if (retryable.length > 0 && !cancelCheck?.()) {
-    console.log(`[${companyName}] Retrying ${retryable.length} docs that failed once`);
-    for (const doc of retryable) {
+    console.log(`[${companyName}] Fetch pass ${pass}: ${pendingDocs.length} pending, ${okDocs.length} ok, ${deadDocs.length} dead`);
+
+    // Priority-sort: company domain first, then PDFs
+    const sortedPending = [...pendingDocs].sort((a, b) => {
+      const aIsCompanyDomain = companyDomain && a.url.toLowerCase().includes(companyDomain) ? 1 : 0;
+      const bIsCompanyDomain = companyDomain && b.url.toLowerCase().includes(companyDomain) ? 1 : 0;
+      if (aIsCompanyDomain !== bIsCompanyDomain) return bIsCompanyDomain - aIsCompanyDomain;
+      const aIsPdf = a.url.toLowerCase().endsWith(".pdf") ? 1 : 0;
+      const bIsPdf = b.url.toLowerCase().endsWith(".pdf") ? 1 : 0;
+      if (aIsPdf !== bIsPdf) return bIsPdf - aIsPdf;
+      return 0;
+    });
+
+    // Fetch each pending document
+    for (const doc of sortedPending) {
       if (cancelCheck?.()) break;
+
       try {
         const type = inferDocumentType(doc.url);
         const content = await processDocument(doc.url, type);
+
         if (content && content.length > 50) {
           await storage.recordFetchSuccess(companyId, doc.url, content);
           newFetchCount++;
@@ -172,18 +175,23 @@ async function runFetchPhase(opts: {
           await storage.recordFetchFailure(companyId, doc.url);
         }
       } catch (error: any) {
+        console.warn(`[${companyName}] Fetch failed for ${doc.url}: ${error.message}`);
         await storage.recordFetchFailure(companyId, doc.url);
       }
     }
+
+    // Brief pause between passes to avoid hammering servers
+    if (pass < MAX_PASSES) {
+      await new Promise((resolve) => setTimeout(resolve, 2000));
+    }
   }
 
-  const totalFetched = alreadyFetched + newFetchCount;
-  console.log(`[${companyName}] Fetch phase complete: ${totalFetched} total fetched (${newFetchCount} new, ${alreadyFetched} cached)`);
+  console.log(`[${companyName}] Fetch phase complete: ${totalFetched} fetched, ${newFetchCount} new this run`);
 
   // Update status to fetched
   await storage.updateCompany(companyId, { analysisStatus: "fetched" });
 
-  return { fetchedCount: totalFetched, totalAccepted: acceptedDocs.length };
+  return { fetchedCount: totalFetched, totalAccepted: totalFetched };
 }
 
 // ─── Phase 2: Analyze Documents (Framework-Specific) ────────────────────────
