@@ -325,6 +325,48 @@ export class Storage {
   }
 
   async claimJob(workerId: string): Promise<AnalysisJob | undefined> {
+    // First, try to recover stale claimed jobs (claimed > 15 minutes ago)
+    const staleResult = await db.execute(sql`
+      WITH stale AS (
+        SELECT id FROM analysis_jobs
+        WHERE status = 'claimed'
+          AND claimed_at < NOW() - INTERVAL '15 minutes'
+          AND attempts < 3
+        ORDER BY claimed_at ASC
+        FOR UPDATE SKIP LOCKED
+        LIMIT 1
+      )
+      UPDATE analysis_jobs 
+      SET status = 'claimed', 
+          worker_id = ${workerId}, 
+          claimed_at = NOW(), 
+          attempts = attempts + 1,
+          updated_at = NOW()
+      WHERE id IN (SELECT id FROM stale)
+      RETURNING *
+    `);
+    if (staleResult.rows[0]) {
+      const row = staleResult.rows[0];
+      console.log(`[Storage] Recovered stale job ${row.id} (${row.company_name}) from worker ${row.worker_id}`);
+      return {
+        id: row.id,
+        companyId: row.company_id,
+        companyName: row.company_name,
+        batchId: row.batch_id,
+        frameworkId: row.framework_id,
+        status: row.status,
+        workerId: row.worker_id,
+        claimedAt: row.claimed_at,
+        completedAt: row.completed_at,
+        attempts: row.attempts,
+        lastError: row.last_error,
+        priority: row.priority,
+        createdAt: row.created_at,
+        updatedAt: row.updated_at,
+      } as AnalysisJob;
+    }
+
+    // Then try to claim a pending job
     const result = await db.execute(sql`
       WITH claimed AS (
         SELECT id FROM analysis_jobs
