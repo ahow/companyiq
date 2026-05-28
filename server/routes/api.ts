@@ -49,7 +49,9 @@ router.get("/debug/jobs", async (req: Request, res: Response) => {
       SELECT column_name, data_type FROM information_schema.columns 
       WHERE table_name = 'analysis_jobs' ORDER BY ordinal_position
     `);
-    res.json({ statusCounts: counts.rows, totalJobs: total.rows[0], sampleJobs: sample.rows, schema: schema.rows });
+    const batch2Jobs = await db.execute(sql`SELECT id, company_id, company_name, status, last_error FROM analysis_jobs WHERE batch_id = 2 LIMIT 5`);
+    const companyIds = await db.execute(sql`SELECT id, name FROM companies LIMIT 5`);
+    res.json({ statusCounts: counts.rows, totalJobs: total.rows[0], sampleJobs: sample.rows, schema: schema.rows, batch2Jobs: batch2Jobs.rows, existingCompanies: companyIds.rows });
   } catch (error: any) {
     res.status(500).json({ error: error.message });
   }
