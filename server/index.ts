@@ -109,7 +109,7 @@ app.get("*", (req, res) => {
 
 const WORKER_ID = `worker-${crypto.randomUUID().slice(0, 8)}`;
 const POLL_INTERVAL = 5000;
-const MAX_CONCURRENT = parseInt(process.env.WORKER_CONCURRENCY || "2");
+const MAX_CONCURRENT = parseInt(process.env.WORKER_CONCURRENCY || "3");
 let workerRunning = true;
 let activeJobs = 0;
 
