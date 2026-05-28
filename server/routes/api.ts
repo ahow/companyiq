@@ -49,9 +49,11 @@ router.get("/debug/jobs", async (req: Request, res: Response) => {
       SELECT column_name, data_type FROM information_schema.columns 
       WHERE table_name = 'analysis_jobs' ORDER BY ordinal_position
     `);
-    const batch2Jobs = await db.execute(sql`SELECT id, company_id, company_name, status, last_error FROM analysis_jobs WHERE batch_id = 2 LIMIT 5`);
-    const companyIds = await db.execute(sql`SELECT id, name FROM companies LIMIT 5`);
-    res.json({ statusCounts: counts.rows, totalJobs: total.rows[0], sampleJobs: sample.rows, schema: schema.rows, batch2Jobs: batch2Jobs.rows, existingCompanies: companyIds.rows });
+    const batch5Jobs = await db.execute(sql`SELECT id, company_id, company_name, status, last_error, worker_id, claimed_at, completed_at FROM analysis_jobs WHERE batch_id = 5 ORDER BY status, id LIMIT 10`);
+    const claimedJobs = await db.execute(sql`SELECT id, company_id, company_name, status, last_error, worker_id, claimed_at FROM analysis_jobs WHERE status = 'claimed' ORDER BY claimed_at`);
+    const recentErrors = await db.execute(sql`SELECT * FROM processing_errors ORDER BY created_at DESC LIMIT 5`);
+    const companyStatuses = await db.execute(sql`SELECT analysis_status, COUNT(*) as count FROM companies GROUP BY analysis_status`);
+    res.json({ statusCounts: counts.rows, totalJobs: total.rows[0], batch5Jobs: batch5Jobs.rows, claimedJobs: claimedJobs.rows, recentErrors: recentErrors.rows, companyStatuses: companyStatuses.rows });
   } catch (error: any) {
     res.status(500).json({ error: error.message });
   }
