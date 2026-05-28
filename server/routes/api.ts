@@ -602,27 +602,7 @@ router.post("/frameworks/:id/measures/bulk", async (req: Request, res: Response)
     res.status(500).json({ error: error.message });
   }
 });
-
-// ─── Framework Builder (AI-assisted) ─────────────────────────────────────────
-
-router.post("/framework-builder/draft", async (req: Request, res: Response) => {
-  try {
-    const { topicDescription, measureCount } = req.body;
-    if (!topicDescription) return res.status(400).json({ error: "Topic description required" });
-
-    const { completeWithFallback } = await import("../lib/ai-providers.js");
-    const { text } = await completeWithFallback("deepseek", {
-      system: "You are an ESG framework designer. Create assessment measures for corporate disclosure analysis.",
-      prompt: `Design an assessment framework for the following topic:\n\n${topicDescription}\n\nCreate ${measureCount || 25} specific, measurable questions grouped into 4-6 categories. Each measure should be answerable as Yes/No from public corporate disclosures.\n\nReturn JSON:\n{\n  "name": "Framework Name",\n  "categories": [\n    {\n      "name": "Category Name",\n      "measures": [\n        {\n          "measureId": "1.1-short-slug",\n          "title": "Does the company...?",\n          "definition": "Detailed definition",\n          "scoringGuidance": {"yes": "Evidence of...", "no": "No evidence of..."}\n        }\n      ]\n    }\n  ]\n}`,
-      json: true,
-      maxTokens: 8000,
-    });
-
-    res.json(JSON.parse(text));
-  } catch (error: any) {
-    res.status(500).json({ error: error.message });
-  }
-});
+// ─── Framework Builder (moved to /routes/framework-builder.ts) ──────────────
 
 // ─── Settings ────────────────────────────────────────────────────────────────
 

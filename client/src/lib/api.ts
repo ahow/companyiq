@@ -62,6 +62,8 @@ export const api = {
   bulkCreateMeasures: (frameworkId: number, measures: any[]) =>
     request(`/frameworks/${frameworkId}/measures/bulk`, { method: "POST", body: JSON.stringify({ measures }) }),
   draftFramework: (data: any) => request("/framework-builder/draft", { method: "POST", body: JSON.stringify(data) }),
+  chatFrameworkBuilder: (messages: Array<{role: string; content: string}>, currentDraft?: any) =>
+    request("/framework-builder/chat", { method: "POST", body: JSON.stringify({ messages, currentDraft }) }),
 
   // Settings
   getSettings: () => request("/settings"),

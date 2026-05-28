@@ -5,6 +5,7 @@ import crypto from "crypto";
 import { fileURLToPath } from "url";
 import { runStartupMigrations } from "./db.js";
 import apiRouter from "./routes/api.js";
+import frameworkBuilderRouter from "./routes/framework-builder.js";
 import { storage } from "./storage.js";
 import { runAnalysisPipeline } from "./lib/pipeline.js";
 
@@ -96,6 +97,7 @@ app.post("/api/logout", (req, res) => {
 // ─── API Routes ──────────────────────────────────────────────────────────────
 
 app.use("/api", apiRouter);
+app.use("/api/framework-builder", frameworkBuilderRouter);
 
 // ─── Static Files (SPA) ─────────────────────────────────────────────────────
 

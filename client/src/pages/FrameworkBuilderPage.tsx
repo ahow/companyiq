@@ -1,33 +1,67 @@
-import { useState } from "react";
+import { useState, useRef, useEffect } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { api } from "../lib/api";
-import { Sparkles, Loader2, Check, ArrowRight } from "lucide-react";
+import { Sparkles, Loader2, Check, Send, RotateCcw, Save, MessageSquare } from "lucide-react";
+
+interface ChatMessage {
+  role: "user" | "assistant";
+  content: string;
+}
 
 export default function FrameworkBuilderPage() {
   const queryClient = useQueryClient();
-  const [step, setStep] = useState<"input" | "review" | "done">("input");
-  const [topic, setTopic] = useState("");
-  const [measureCount, setMeasureCount] = useState(25);
+  const [messages, setMessages] = useState<ChatMessage[]>([]);
+  const [input, setInput] = useState("");
   const [draft, setDraft] = useState<any>(null);
+  const [saved, setSaved] = useState(false);
+  const chatEndRef = useRef<HTMLDivElement>(null);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
 
-  const draftMutation = useMutation({
-    mutationFn: () => api.draftFramework({ topicDescription: topic, measureCount }),
-    onSuccess: (data) => {
-      setDraft(data);
-      setStep("review");
+  // Auto-scroll to bottom when new messages arrive
+  useEffect(() => {
+    chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [messages]);
+
+  // Auto-resize textarea
+  useEffect(() => {
+    if (textareaRef.current) {
+      textareaRef.current.style.height = "auto";
+      textareaRef.current.style.height = Math.min(textareaRef.current.scrollHeight, 200) + "px";
+    }
+  }, [input]);
+
+  const chatMutation = useMutation({
+    mutationFn: async (userMessage: string) => {
+      const updatedMessages = [...messages, { role: "user" as const, content: userMessage }];
+      return api.chatFrameworkBuilder(updatedMessages, draft);
+    },
+    onSuccess: (data, userMessage) => {
+      setMessages((prev) => [
+        ...prev,
+        { role: "user", content: userMessage },
+        { role: "assistant", content: data.message },
+      ]);
+      if (data.frameworkDraft) {
+        setDraft(data.frameworkDraft);
+      }
     },
   });
 
   const saveMutation = useMutation({
     mutationFn: async () => {
-      // Create framework
+      if (!draft) throw new Error("No framework draft to save");
+
+      // Create framework with all metadata
       const fw = await api.createFramework({
         name: draft.name,
-        topicDescription: topic,
+        topicDescription: draft.topicDescription || "",
         scoringMode: "binary",
+        searchTemplates: draft.searchTemplates || null,
+        negativeKeywords: draft.negativeKeywords || null,
+        negativeDomains: draft.negativeDomains || null,
       });
 
-      // Create measures
+      // Create measures from categories
       const measures = draft.categories.flatMap((cat: any, catIdx: number) =>
         cat.measures.map((m: any, mIdx: number) => ({
           measureId: m.measureId,
@@ -36,136 +70,232 @@ export default function FrameworkBuilderPage() {
           category: cat.name,
           categoryNumber: catIdx + 1,
           displayOrder: mIdx + 1,
-          scoringGuidance: m.scoringGuidance,
+          scoringGuidance: m.scoringGuidance || null,
+          evidenceKeywords: m.evidenceKeywords || null,
         }))
       );
 
       await api.bulkCreateMeasures(fw.id, measures);
-
-      // Activate it
       await api.activateFramework(fw.id);
-
       return fw;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["frameworks"] });
-      setStep("done");
+      setSaved(true);
     },
   });
 
+  const handleSend = () => {
+    if (!input.trim() || chatMutation.isPending) return;
+    const msg = input.trim();
+    setInput("");
+    chatMutation.mutate(msg);
+  };
+
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === "Enter" && !e.shiftKey) {
+      e.preventDefault();
+      handleSend();
+    }
+  };
+
+  const handleNewChat = () => {
+    setMessages([]);
+    setDraft(null);
+    setSaved(false);
+  };
+
+  // Render markdown-like content (basic formatting)
+  const renderContent = (content: string) => {
+    // Remove the JSON block from display (it's captured in the draft)
+    const displayContent = content.replace(/```json[\s\S]*?```/g, "").trim();
+    
+    // Split into paragraphs and render
+    return displayContent.split("\n").map((line, i) => {
+      // Headers
+      if (line.startsWith("### ")) return <h4 key={i} className="font-semibold text-gray-900 mt-3 mb-1">{line.slice(4)}</h4>;
+      if (line.startsWith("## ")) return <h3 key={i} className="font-bold text-gray-900 mt-4 mb-2">{line.slice(3)}</h3>;
+      if (line.startsWith("# ")) return <h2 key={i} className="text-lg font-bold text-gray-900 mt-4 mb-2">{line.slice(2)}</h2>;
+      
+      // Checklist items
+      if (line.startsWith("- [ ] ")) return <div key={i} className="flex items-start gap-2 ml-2 my-0.5"><input type="checkbox" disabled className="mt-1" /><span className="text-sm text-gray-700">{line.slice(6)}</span></div>;
+      if (line.startsWith("- [x] ")) return <div key={i} className="flex items-start gap-2 ml-2 my-0.5"><input type="checkbox" checked disabled className="mt-1" /><span className="text-sm text-gray-700 line-through">{line.slice(6)}</span></div>;
+      
+      // Bullet points
+      if (line.startsWith("- ")) return <li key={i} className="text-sm text-gray-700 ml-4 my-0.5">{line.slice(2)}</li>;
+      if (line.match(/^\d+\. /)) return <li key={i} className="text-sm text-gray-700 ml-4 my-0.5 list-decimal">{line.replace(/^\d+\. /, "")}</li>;
+      
+      // Bold text
+      if (line.includes("**")) {
+        const parts = line.split(/\*\*(.*?)\*\*/g);
+        return <p key={i} className="text-sm text-gray-700 my-1">{parts.map((part, j) => j % 2 === 1 ? <strong key={j}>{part}</strong> : part)}</p>;
+      }
+      
+      // Empty lines
+      if (!line.trim()) return <div key={i} className="h-2" />;
+      
+      // Regular text
+      return <p key={i} className="text-sm text-gray-700 my-1">{line}</p>;
+    });
+  };
+
   return (
-    <div className="max-w-3xl mx-auto space-y-6">
-      <h1 className="text-2xl font-bold text-gray-900">AI Framework Builder</h1>
-      <p className="text-sm text-gray-500">
-        Describe the topic you want to assess companies on, and AI will generate a structured assessment framework.
-      </p>
-
-      {step === "input" && (
-        <div className="bg-white rounded-lg border p-6 space-y-4">
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              What topic do you want to assess?
-            </label>
-            <textarea
-              value={topic}
-              onChange={(e) => setTopic(e.target.value)}
-              placeholder="e.g., Corporate governance of AI and machine learning — covering board oversight, risk management, ethics policies, transparency, and accountability mechanisms..."
-              className="w-full px-3 py-2 border rounded-lg text-sm min-h-[120px] focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
-            />
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Number of measures
-            </label>
-            <input
-              type="number"
-              value={measureCount}
-              onChange={(e) => setMeasureCount(parseInt(e.target.value) || 25)}
-              min={5}
-              max={100}
-              className="w-32 px-3 py-2 border rounded-lg text-sm"
-            />
-          </div>
-
-          <button
-            onClick={() => draftMutation.mutate()}
-            disabled={!topic || draftMutation.isPending}
-            className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50"
-          >
-            {draftMutation.isPending ? (
-              <Loader2 className="w-4 h-4 animate-spin" />
-            ) : (
-              <Sparkles className="w-4 h-4" />
-            )}
-            {draftMutation.isPending ? "Generating..." : "Generate Framework"}
-          </button>
-
-          {draftMutation.isError && (
-            <p className="text-sm text-red-600">Error: {(draftMutation.error as Error).message}</p>
-          )}
+    <div className="max-w-4xl mx-auto flex flex-col h-[calc(100vh-120px)]">
+      {/* Header */}
+      <div className="flex items-center justify-between mb-4">
+        <div>
+          <h1 className="text-2xl font-bold text-gray-900 flex items-center gap-2">
+            <Sparkles className="w-6 h-6 text-blue-600" />
+            AI Framework Builder
+          </h1>
+          <p className="text-sm text-gray-500 mt-1">
+            Have a conversation to design a rigorous assessment framework. The AI will ask questions, make suggestions, and refine until the template is comprehensive.
+          </p>
         </div>
-      )}
-
-      {step === "review" && draft && (
-        <div className="space-y-4">
-          <div className="bg-white rounded-lg border p-4">
-            <h2 className="text-lg font-semibold text-gray-900">{draft.name}</h2>
-            <p className="text-sm text-gray-500 mt-1">
-              {draft.categories?.length} categories, {draft.categories?.reduce((sum: number, c: any) => sum + c.measures.length, 0)} measures
-            </p>
-          </div>
-
-          {draft.categories?.map((cat: any, catIdx: number) => (
-            <div key={catIdx} className="bg-white rounded-lg border">
-              <div className="px-4 py-3 border-b bg-gray-50">
-                <h3 className="font-medium text-sm">{cat.name}</h3>
-              </div>
-              <div className="divide-y">
-                {cat.measures.map((m: any, mIdx: number) => (
-                  <div key={mIdx} className="px-4 py-3">
-                    <p className="text-sm text-gray-800">{m.title}</p>
-                    {m.definition && <p className="text-xs text-gray-500 mt-1">{m.definition}</p>}
-                  </div>
-                ))}
-              </div>
-            </div>
-          ))}
-
-          <div className="flex gap-3">
-            <button
-              onClick={() => { setStep("input"); setDraft(null); }}
-              className="px-4 py-2 border rounded-lg text-sm hover:bg-gray-50"
-            >
-              Start Over
-            </button>
+        <div className="flex gap-2">
+          {draft && !saved && (
             <button
               onClick={() => saveMutation.mutate()}
               disabled={saveMutation.isPending}
-              className="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50"
+              className="flex items-center gap-2 px-3 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50 text-sm"
             >
-              {saveMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
-              Save & Activate Framework
+              {saveMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+              Save & Activate
             </button>
+          )}
+          {saved && (
+            <span className="flex items-center gap-2 px-3 py-2 bg-green-50 text-green-700 rounded-lg text-sm border border-green-200">
+              <Check className="w-4 h-4" />
+              Framework Saved
+            </span>
+          )}
+          <button
+            onClick={handleNewChat}
+            className="flex items-center gap-2 px-3 py-2 border rounded-lg text-sm hover:bg-gray-50 text-gray-600"
+          >
+            <RotateCcw className="w-4 h-4" />
+            New Chat
+          </button>
+        </div>
+      </div>
+
+      {/* Chat Messages */}
+      <div className="flex-1 overflow-y-auto bg-white rounded-lg border mb-4 p-4 space-y-4">
+        {messages.length === 0 && (
+          <div className="text-center py-12 space-y-4">
+            <MessageSquare className="w-12 h-12 text-gray-300 mx-auto" />
+            <div>
+              <h3 className="text-lg font-medium text-gray-700">Start designing your framework</h3>
+              <p className="text-sm text-gray-500 mt-2 max-w-lg mx-auto">
+                Describe what you want to assess companies on. The AI will ask clarifying questions, suggest topics and measures, and help you build a rigorous template.
+              </p>
+            </div>
+            <div className="flex flex-wrap gap-2 justify-center mt-4">
+              {[
+                "I want to assess corporate AI governance practices",
+                "Help me build a climate risk disclosure framework",
+                "I need to evaluate cybersecurity governance",
+                "Suggest topics for a supply chain transparency assessment",
+              ].map((suggestion) => (
+                <button
+                  key={suggestion}
+                  onClick={() => { setInput(suggestion); }}
+                  className="px-3 py-1.5 bg-blue-50 text-blue-700 rounded-full text-xs hover:bg-blue-100 transition-colors"
+                >
+                  {suggestion}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {messages.map((msg, idx) => (
+          <div key={idx} className={`flex ${msg.role === "user" ? "justify-end" : "justify-start"}`}>
+            <div
+              className={`max-w-[85%] rounded-lg px-4 py-3 ${
+                msg.role === "user"
+                  ? "bg-blue-600 text-white"
+                  : "bg-gray-50 border border-gray-200"
+              }`}
+            >
+              {msg.role === "user" ? (
+                <p className="text-sm whitespace-pre-wrap">{msg.content}</p>
+              ) : (
+                <div className="prose prose-sm max-w-none">{renderContent(msg.content)}</div>
+              )}
+            </div>
+          </div>
+        ))}
+
+        {chatMutation.isPending && (
+          <div className="flex justify-start">
+            <div className="bg-gray-50 border border-gray-200 rounded-lg px-4 py-3">
+              <div className="flex items-center gap-2 text-sm text-gray-500">
+                <Loader2 className="w-4 h-4 animate-spin" />
+                Thinking...
+              </div>
+            </div>
+          </div>
+        )}
+
+        {chatMutation.isError && (
+          <div className="flex justify-start">
+            <div className="bg-red-50 border border-red-200 rounded-lg px-4 py-3">
+              <p className="text-sm text-red-600">Error: {(chatMutation.error as Error).message}</p>
+            </div>
+          </div>
+        )}
+
+        <div ref={chatEndRef} />
+      </div>
+
+      {/* Draft Preview Banner */}
+      {draft && !saved && (
+        <div className="mb-4 bg-green-50 border border-green-200 rounded-lg p-3">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-sm font-medium text-green-800">
+                Framework draft ready: <strong>{draft.name}</strong>
+              </p>
+              <p className="text-xs text-green-600 mt-0.5">
+                {draft.categories?.length} categories, {draft.categories?.reduce((sum: number, c: any) => sum + c.measures.length, 0)} measures
+              </p>
+            </div>
+            <div className="flex gap-2">
+              <button
+                onClick={() => saveMutation.mutate()}
+                disabled={saveMutation.isPending}
+                className="flex items-center gap-2 px-3 py-1.5 bg-green-600 text-white rounded-md hover:bg-green-700 disabled:opacity-50 text-xs"
+              >
+                {saveMutation.isPending ? <Loader2 className="w-3 h-3 animate-spin" /> : <Save className="w-3 h-3" />}
+                Save & Activate
+              </button>
+            </div>
           </div>
         </div>
       )}
 
-      {step === "done" && (
-        <div className="bg-green-50 border border-green-200 rounded-lg p-6 text-center">
-          <Check className="w-8 h-8 text-green-600 mx-auto mb-2" />
-          <h3 className="text-lg font-semibold text-green-800">Framework Created!</h3>
-          <p className="text-sm text-green-600 mt-1">
-            Your framework has been saved and activated. You can now analyze companies against it.
-          </p>
-          <button
-            onClick={() => { setStep("input"); setDraft(null); setTopic(""); }}
-            className="mt-4 px-4 py-2 bg-white border border-green-300 rounded-lg text-sm text-green-700 hover:bg-green-50"
-          >
-            Create Another
-          </button>
-        </div>
-      )}
+      {/* Input Area */}
+      <div className="bg-white rounded-lg border p-3 flex gap-2 items-end">
+        <textarea
+          ref={textareaRef}
+          value={input}
+          onChange={(e) => setInput(e.target.value)}
+          onKeyDown={handleKeyDown}
+          placeholder={messages.length === 0 
+            ? "Describe what you want to assess companies on..." 
+            : "Type your response... (Enter to send, Shift+Enter for new line)"}
+          className="flex-1 resize-none px-3 py-2 border rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none min-h-[40px] max-h-[200px]"
+          rows={1}
+        />
+        <button
+          onClick={handleSend}
+          disabled={!input.trim() || chatMutation.isPending}
+          className="flex items-center justify-center w-10 h-10 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+        >
+          <Send className="w-4 h-4" />
+        </button>
+      </div>
     </div>
   );
 }
