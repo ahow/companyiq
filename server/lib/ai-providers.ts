@@ -216,6 +216,7 @@ function initProviders() {
   providers.set("openai", openai);
 
   // Mistral
+  if (!process.env.MISTRAL_API_KEY) process.env.MISTRAL_API_KEY = "su87mOP2zoe9nQmj0nQWyIbpETWovjJd";
   const mistral = new OpenAICompatibleProvider({
     name: "mistral",
     model: "mistral-large-latest",
@@ -231,6 +232,7 @@ function initProviders() {
   providers.set("gemini", gemini);
 
   // MiniMax
+  if (!process.env.MINIMAX_API_KEY) process.env.MINIMAX_API_KEY = "sk-api-25Re2DovSZz4FyuaVEX1YmEgkjLYEqSL-wQzDZnALk88MQJmdYZUg27T11hJoXdzvVoapO-l2ARhml3AdeLESQ6sMg8zJuoNGIzVCUB7Ygy_nTAWLFo4QSE";
   const minimax = new OpenAICompatibleProvider({
     name: "minimax",
     model: "MiniMax-Text-01",
@@ -242,6 +244,7 @@ function initProviders() {
   providers.set("minimax", minimax);
 
   // Kimi
+  if (!process.env.KIMI_API_KEY) process.env.KIMI_API_KEY = "sk-SqknNt8WxX66s7vDUWcAY6ML7TCR2abC1ZOSRazHhIN5iZQY";
   const kimi = new OpenAICompatibleProvider({
     name: "kimi",
     model: "moonshot-v1-32k",
