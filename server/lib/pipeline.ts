@@ -113,20 +113,27 @@ async function runFetchPhase(opts: {
   const pendingDocs = acceptedDocs.filter((d) => d.fetchStatus === "pending");
   const alreadyFetched = acceptedDocs.filter((d) => d.fetchStatus === "ok").length;
 
-  console.log(`[${companyName}] Fetching ${pendingDocs.length} pending documents (${alreadyFetched} already cached)`);
+  // Priority-sort pending docs: company domain first, then PDFs, then by discovery priority
+  const companyDomain = company.domain?.replace(/^www\./, "").toLowerCase() || "";
+  const sortedPending = [...pendingDocs].sort((a, b) => {
+    const aIsCompanyDomain = companyDomain && a.url.toLowerCase().includes(companyDomain) ? 1 : 0;
+    const bIsCompanyDomain = companyDomain && b.url.toLowerCase().includes(companyDomain) ? 1 : 0;
+    if (aIsCompanyDomain !== bIsCompanyDomain) return bIsCompanyDomain - aIsCompanyDomain;
+    // PDFs from company domain are highest priority
+    const aIsPdf = a.url.toLowerCase().endsWith(".pdf") ? 1 : 0;
+    const bIsPdf = b.url.toLowerCase().endsWith(".pdf") ? 1 : 0;
+    if (aIsPdf !== bIsPdf) return bIsPdf - aIsPdf;
+    return 0;
+  });
+
+  console.log(`[${companyName}] Fetching ${sortedPending.length} pending documents (${alreadyFetched} already cached)`);
 
   let newFetchCount = 0;
-  const TOTAL_FETCH_BUDGET_MS = 10 * 60 * 1000; // 10 minute total budget
-  const fetchStartTime = Date.now();
+  let failCount = 0;
 
-  for (const doc of pendingDocs) {
+  // NO time budget — fetch ALL documents as the user requires
+  for (const doc of sortedPending) {
     if (cancelCheck?.()) break;
-
-    // Check total time budget
-    if (Date.now() - fetchStartTime > TOTAL_FETCH_BUDGET_MS) {
-      console.warn(`[${companyName}] Fetch time budget exhausted after ${newFetchCount} docs`);
-      break;
-    }
 
     try {
       const type = inferDocumentType(doc.url);
@@ -137,10 +144,36 @@ async function runFetchPhase(opts: {
         newFetchCount++;
       } else {
         await storage.recordFetchFailure(companyId, doc.url);
+        failCount++;
       }
     } catch (error: any) {
       console.warn(`[${companyName}] Fetch failed for ${doc.url}: ${error.message}`);
       await storage.recordFetchFailure(companyId, doc.url);
+      failCount++;
+    }
+  }
+
+  console.log(`[${companyName}] Fetch attempts complete: ${newFetchCount} succeeded, ${failCount} failed`);
+
+  // Retry docs that failed once (give them a second chance with different timing)
+  const retryDocs = await storage.getAcceptedDocuments(companyId);
+  const retryable = retryDocs.filter((d) => d.fetchStatus === "pending" && (d.fetchFailureCount || 0) === 1);
+  if (retryable.length > 0 && !cancelCheck?.()) {
+    console.log(`[${companyName}] Retrying ${retryable.length} docs that failed once`);
+    for (const doc of retryable) {
+      if (cancelCheck?.()) break;
+      try {
+        const type = inferDocumentType(doc.url);
+        const content = await processDocument(doc.url, type);
+        if (content && content.length > 50) {
+          await storage.recordFetchSuccess(companyId, doc.url, content);
+          newFetchCount++;
+        } else {
+          await storage.recordFetchFailure(companyId, doc.url);
+        }
+      } catch (error: any) {
+        await storage.recordFetchFailure(companyId, doc.url);
+      }
     }
   }
 

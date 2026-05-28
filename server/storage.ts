@@ -362,12 +362,12 @@ export class Storage {
   }
 
   async claimJob(workerId: string): Promise<AnalysisJob | undefined> {
-    // First, try to recover stale claimed jobs (claimed > 15 minutes ago)
+    // First, try to recover stale claimed jobs (claimed > 25 minutes ago, allowing 20-min job timeout + buffer)
     const staleResult = await db.execute(sql`
       WITH stale AS (
         SELECT id FROM analysis_jobs
         WHERE status = 'claimed'
-          AND claimed_at < NOW() - INTERVAL '15 minutes'
+          AND claimed_at < NOW() - INTERVAL '25 minutes'
           AND attempts < 6
         ORDER BY claimed_at ASC
         FOR UPDATE SKIP LOCKED
