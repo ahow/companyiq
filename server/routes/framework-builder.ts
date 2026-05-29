@@ -184,7 +184,7 @@ ${fileContext && fileContext.length > 0 ? `\nUPLOADED REFERENCE FILES:\nThe user
     const { text } = await completeWithFallback("deepseek", {
       system: systemPrompt,
       prompt: conversationPrompt,
-      maxTokens: 16000,
+      maxTokens: 32000,
     });
 
     // Check if the response contains a framework JSON
