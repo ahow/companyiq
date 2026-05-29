@@ -1,12 +1,87 @@
 import { Router, Request, Response } from "express";
+import multer from "multer";
 
 const router = Router();
+const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 50 * 1024 * 1024 } });
+
+// ─── File Upload for Chat Context ────────────────────────────────────────────
+
+router.post("/upload", upload.single("file"), async (req: Request, res: Response) => {
+  try {
+    if (!req.file) return res.status(400).json({ error: "No file uploaded" });
+
+    const filename = req.file.originalname;
+    const mimeType = req.file.mimetype;
+    let extractedText = "";
+
+    if (mimeType === "application/pdf") {
+      const pdfParse = (await import("pdf-parse")).default;
+      const data = await pdfParse(req.file.buffer);
+      extractedText = data.text || "";
+    } else if (
+      mimeType === "text/plain" ||
+      mimeType === "text/csv" ||
+      mimeType === "text/markdown" ||
+      mimeType === "application/json"
+    ) {
+      extractedText = req.file.buffer.toString("utf-8");
+    } else if (
+      mimeType === "application/vnd.openxmlformats-officedocument.wordprocessingml.document" ||
+      mimeType === "application/msword"
+    ) {
+      // Basic .docx text extraction via mammoth
+      try {
+        const mammoth = await import("mammoth");
+        const result = await mammoth.extractRawText({ buffer: req.file.buffer });
+        extractedText = result.value || "";
+      } catch {
+        extractedText = req.file.buffer.toString("utf-8").replace(/[^\x20-\x7E\n\r\t]/g, " ");
+      }
+    } else if (
+      mimeType === "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" ||
+      mimeType === "application/vnd.ms-excel"
+    ) {
+      try {
+        const XLSX = await import("xlsx");
+        const workbook = XLSX.read(req.file.buffer, { type: "buffer" });
+        const sheets: string[] = [];
+        for (const sheetName of workbook.SheetNames) {
+          const sheet = workbook.Sheets[sheetName];
+          sheets.push(`--- Sheet: ${sheetName} ---\n${XLSX.utils.sheet_to_csv(sheet)}`);
+        }
+        extractedText = sheets.join("\n\n");
+      } catch {
+        extractedText = "[Could not extract spreadsheet content]";
+      }
+    } else {
+      // Attempt plain text extraction as fallback
+      extractedText = req.file.buffer.toString("utf-8").replace(/[^\x20-\x7E\n\r\t]/g, " ");
+    }
+
+    // Truncate very large files to avoid exceeding LLM context
+    const MAX_CHARS = 100000;
+    const truncated = extractedText.length > MAX_CHARS;
+    if (truncated) {
+      extractedText = extractedText.slice(0, MAX_CHARS);
+    }
+
+    res.json({
+      filename,
+      mimeType,
+      charCount: extractedText.length,
+      truncated,
+      content: extractedText,
+    });
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
 
 // ─── Framework Builder Chat (Conversational AI) ─────────────────────────────
 
 router.post("/chat", async (req: Request, res: Response) => {
   try {
-    const { messages, currentDraft } = req.body;
+    const { messages, currentDraft, fileContext } = req.body;
     if (!messages || !Array.isArray(messages) || messages.length === 0) {
       return res.status(400).json({ error: "Messages array required" });
     }
@@ -86,7 +161,9 @@ QUALITY CHECKLIST (mention this to the user when appropriate):
 - [ ] Categories are logically grouped
 - [ ] Search templates are targeted and effective
 
-${currentDraft ? `\nCURRENT DRAFT STATE:\n${JSON.stringify(currentDraft, null, 2)}\n\nThe user may want to refine this draft. Help them improve it.` : ""}`;
+${currentDraft ? `\nCURRENT DRAFT STATE:\n${JSON.stringify(currentDraft, null, 2)}\n\nThe user may want to refine this draft. Help them improve it.` : ""}
+
+${fileContext && fileContext.length > 0 ? `\nUPLOADED REFERENCE FILES:\nThe user has uploaded the following files to inform the framework design. Use their content to suggest relevant measures, categories, and scoring criteria.\n${fileContext.map((f: { filename: string; content: string }) => `\n--- FILE: ${f.filename} ---\n${f.content.slice(0, 50000)}\n--- END FILE ---`).join("\n")}` : ""}`;
 
     // Build the conversation for the LLM
     const conversationPrompt = messages.map((m: { role: string; content: string }) => 

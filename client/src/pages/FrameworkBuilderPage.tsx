@@ -1,11 +1,19 @@
 import { useState, useRef, useEffect } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { api } from "../lib/api";
-import { Sparkles, Loader2, Check, Send, RotateCcw, Save, MessageSquare } from "lucide-react";
+import { Sparkles, Loader2, Check, Send, RotateCcw, Save, MessageSquare, Paperclip, X, FileText } from "lucide-react";
 
 interface ChatMessage {
   role: "user" | "assistant";
   content: string;
+  attachments?: Array<{ filename: string; charCount: number }>;
+}
+
+interface UploadedFile {
+  filename: string;
+  content: string;
+  charCount: number;
+  truncated: boolean;
 }
 
 export default function FrameworkBuilderPage() {
@@ -14,8 +22,11 @@ export default function FrameworkBuilderPage() {
   const [input, setInput] = useState("");
   const [draft, setDraft] = useState<any>(null);
   const [saved, setSaved] = useState(false);
+  const [uploadedFiles, setUploadedFiles] = useState<UploadedFile[]>([]);
+  const [isUploading, setIsUploading] = useState(false);
   const chatEndRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Auto-scroll to bottom when new messages arrive
   useEffect(() => {
@@ -33,12 +44,15 @@ export default function FrameworkBuilderPage() {
   const chatMutation = useMutation({
     mutationFn: async (userMessage: string) => {
       const updatedMessages = [...messages, { role: "user" as const, content: userMessage }];
-      return api.chatFrameworkBuilder(updatedMessages, draft);
+      const fileContext = uploadedFiles.length > 0
+        ? uploadedFiles.map((f) => ({ filename: f.filename, content: f.content }))
+        : undefined;
+      return api.chatFrameworkBuilder(updatedMessages, draft, fileContext);
     },
     onSuccess: (data, userMessage) => {
       setMessages((prev) => [
         ...prev,
-        { role: "user", content: userMessage },
+        { role: "user", content: userMessage, attachments: undefined },
         { role: "assistant", content: data.message },
       ]);
       if (data.frameworkDraft) {
@@ -103,6 +117,38 @@ export default function FrameworkBuilderPage() {
     setMessages([]);
     setDraft(null);
     setSaved(false);
+    setUploadedFiles([]);
+  };
+
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (!files || files.length === 0) return;
+
+    setIsUploading(true);
+    try {
+      for (const file of Array.from(files)) {
+        const result = await api.uploadFrameworkFile(file);
+        setUploadedFiles((prev) => [
+          ...prev,
+          {
+            filename: result.filename,
+            content: result.content,
+            charCount: result.charCount,
+            truncated: result.truncated,
+          },
+        ]);
+      }
+    } catch (err: any) {
+      console.error("Upload failed:", err.message);
+    } finally {
+      setIsUploading(false);
+      // Reset file input
+      if (fileInputRef.current) fileInputRef.current.value = "";
+    }
+  };
+
+  const removeFile = (index: number) => {
+    setUploadedFiles((prev) => prev.filter((_, i) => i !== index));
   };
 
   // Render markdown-like content (basic formatting)
@@ -187,7 +233,7 @@ export default function FrameworkBuilderPage() {
             <div>
               <h3 className="text-lg font-medium text-gray-700">Start designing your framework</h3>
               <p className="text-sm text-gray-500 mt-2 max-w-lg mx-auto">
-                Describe what you want to assess companies on. The AI will ask clarifying questions, suggest topics and measures, and help you build a rigorous template.
+                Describe what you want to assess companies on. You can also upload reference files (PDFs, documents, spreadsheets) to help inform the template design.
               </p>
             </div>
             <div className="flex flex-wrap gap-2 justify-center mt-4">
@@ -275,8 +321,54 @@ export default function FrameworkBuilderPage() {
         </div>
       )}
 
+      {/* Uploaded Files Display */}
+      {uploadedFiles.length > 0 && (
+        <div className="mb-2 flex flex-wrap gap-2">
+          {uploadedFiles.map((file, idx) => (
+            <div
+              key={idx}
+              className="flex items-center gap-1.5 px-2.5 py-1.5 bg-blue-50 border border-blue-200 rounded-lg text-xs text-blue-700"
+            >
+              <FileText className="w-3.5 h-3.5 flex-shrink-0" />
+              <span className="max-w-[150px] truncate" title={file.filename}>{file.filename}</span>
+              <span className="text-blue-400">
+                ({file.truncated ? "100k+" : `${Math.round(file.charCount / 1000)}k`} chars)
+              </span>
+              <button
+                onClick={() => removeFile(idx)}
+                className="ml-0.5 p-0.5 hover:bg-blue-100 rounded"
+                title="Remove file"
+              >
+                <X className="w-3 h-3" />
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+
       {/* Input Area */}
       <div className="bg-white rounded-lg border p-3 flex gap-2 items-end">
+        {/* File upload button */}
+        <button
+          onClick={() => fileInputRef.current?.click()}
+          disabled={isUploading}
+          className="flex items-center justify-center w-10 h-10 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors disabled:opacity-50"
+          title="Upload reference files (PDF, DOCX, TXT, CSV, XLSX)"
+        >
+          {isUploading ? (
+            <Loader2 className="w-5 h-5 animate-spin" />
+          ) : (
+            <Paperclip className="w-5 h-5" />
+          )}
+        </button>
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept=".pdf,.doc,.docx,.txt,.csv,.json,.md,.xlsx,.xls"
+          multiple
+          className="hidden"
+          onChange={handleFileUpload}
+        />
         <textarea
           ref={textareaRef}
           value={input}

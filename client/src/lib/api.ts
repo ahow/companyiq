@@ -62,8 +62,22 @@ export const api = {
   bulkCreateMeasures: (frameworkId: number, measures: any[]) =>
     request(`/frameworks/${frameworkId}/measures/bulk`, { method: "POST", body: JSON.stringify({ measures }) }),
   draftFramework: (data: any) => request("/framework-builder/draft", { method: "POST", body: JSON.stringify(data) }),
-  chatFrameworkBuilder: (messages: Array<{role: string; content: string}>, currentDraft?: any) =>
-    request("/framework-builder/chat", { method: "POST", body: JSON.stringify({ messages, currentDraft }) }),
+  chatFrameworkBuilder: (messages: Array<{role: string; content: string}>, currentDraft?: any, fileContext?: Array<{filename: string; content: string}>) =>
+    request("/framework-builder/chat", { method: "POST", body: JSON.stringify({ messages, currentDraft, fileContext }) }),
+  uploadFrameworkFile: async (file: File) => {
+    const formData = new FormData();
+    formData.append("file", file);
+    const res = await fetch(`${BASE}/framework-builder/upload`, {
+      method: "POST",
+      body: formData,
+      credentials: "include",
+    });
+    if (!res.ok) {
+      const body = await res.json().catch(() => ({ error: res.statusText }));
+      throw new Error(body.error || res.statusText);
+    }
+    return res.json();
+  },
 
   // Settings
   getSettings: () => request("/settings"),
