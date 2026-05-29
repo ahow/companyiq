@@ -6,6 +6,7 @@ import {
   Plus, Upload, Play, Square, Search, Trash2, ExternalLink,
   CheckCircle2, XCircle, Clock, Loader2, AlertCircle, Download, Filter, RotateCcw
 } from "lucide-react";
+import ScoreDistribution from "../components/ScoreDistribution";
 
 export default function DashboardPage() {
   const queryClient = useQueryClient();
@@ -343,6 +344,18 @@ export default function DashboardPage() {
             List reset successfully. {(resetListMutation.data as any)?.resetCount} companies cleared.
           </span>
         </div>
+      )}
+
+      {/* Score Distribution Histogram */}
+      {companies.length > 0 && (
+        <ScoreDistribution
+          companies={filtered}
+          listName={
+            selectedListId
+              ? companyLists.find((l: any) => l.id === selectedListId)?.name
+              : undefined
+          }
+        />
       )}
 
       {/* Company Table */}
