@@ -18,6 +18,15 @@ router.post("/upload", upload.single("file"), async (req: Request, res: Response
       const pdfParse = (await import("pdf-parse")).default;
       const data = await pdfParse(req.file.buffer);
       extractedText = data.text || "";
+      // If pdf-parse returned empty (scanned/image PDF), try basic buffer extraction
+      if (!extractedText.trim()) {
+        const raw = req.file.buffer.toString("utf-8").replace(/[^\x20-\x7E\n\r\t]/g, " ").replace(/ {3,}/g, " ").trim();
+        if (raw.length > 100) {
+          extractedText = raw;
+        } else {
+          extractedText = "[PDF appears to be scanned/image-based. Text extraction was not possible. The filename is: " + filename + "]";
+        }
+      }
     } else if (
       mimeType === "text/plain" ||
       mimeType === "text/csv" ||
@@ -142,7 +151,9 @@ WHEN YOU HAVE ENOUGH INFORMATION, generate the complete framework as a JSON bloc
 
 IMPORTANT RULES:
 - Do NOT generate the framework JSON until you have asked enough questions to be confident it will be comprehensive and rigorous
+- When you DO generate it, you MUST include the complete JSON block in the SAME response. NEVER say "hold on" or "please wait" — you cannot send follow-up messages. Everything must be in one response.
 - When you DO generate it, include it in your message along with an explanation of what you've created and invite the user to review/refine
+- CRITICAL: If you decide to generate the framework, you MUST output the full ```json block in this response. Do not defer it to a later message — there is no later message.
 - If the user asks you to "suggest topics" or "what should I include", provide detailed suggestions with reasoning
 - Each measure definition MUST be at least 50 words
 - Each scoringGuidance entry MUST be at least 30 words
@@ -173,7 +184,7 @@ ${fileContext && fileContext.length > 0 ? `\nUPLOADED REFERENCE FILES:\nThe user
     const { text } = await completeWithFallback("deepseek", {
       system: systemPrompt,
       prompt: conversationPrompt,
-      maxTokens: 8000,
+      maxTokens: 16000,
     });
 
     // Check if the response contains a framework JSON
