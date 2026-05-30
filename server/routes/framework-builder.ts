@@ -153,7 +153,7 @@ IMPORTANT RULES:
 - Do NOT generate the framework JSON until you have asked enough questions to be confident it will be comprehensive and rigorous
 - When you DO generate it, you MUST include the complete JSON block in the SAME response. NEVER say "hold on" or "please wait" — you cannot send follow-up messages. Everything must be in one response.
 - When you DO generate it, include it in your message along with an explanation of what you've created and invite the user to review/refine
-- CRITICAL: If you decide to generate the framework, you MUST output the full ```json block in this response. Do not defer it to a later message — there is no later message.
+- CRITICAL: If you decide to generate the framework, you MUST output the full \`\`\`json block in this response. Do not defer it to a later message — there is no later message.
 - If the user asks you to "suggest topics" or "what should I include", provide detailed suggestions with reasoning
 - Each measure definition MUST be at least 50 words
 - Each scoringGuidance entry MUST be at least 30 words
