@@ -469,6 +469,7 @@ router.post("/companies/analyze-all", async (req: Request, res: Response) => {
       listName: listName || "All companies",
     });
   } catch (error: any) {
+    batchState.running = false;
     res.status(500).json({ error: error.message });
   }
 });
