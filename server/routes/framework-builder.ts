@@ -205,6 +205,123 @@ ${fileContext && fileContext.length > 0 ? `\nUPLOADED REFERENCE FILES:\nThe user
   }
 });
 
+// ─── Framework Editor Chat (Edit existing frameworks via AI) ─────────────────
+
+router.post("/edit", async (req: Request, res: Response) => {
+  try {
+    const { messages, frameworkId } = req.body;
+    if (!messages || !Array.isArray(messages) || messages.length === 0) {
+      return res.status(400).json({ error: "Messages array required" });
+    }
+    if (!frameworkId) {
+      return res.status(400).json({ error: "frameworkId required" });
+    }
+
+    const { storage } = await import("../storage.js");
+    const framework = await storage.getFramework(frameworkId);
+    if (!framework) return res.status(404).json({ error: "Framework not found" });
+
+    const measures = await storage.getMeasuresForFramework(frameworkId);
+
+    const { completeWithFallback } = await import("../lib/ai-providers.js");
+
+    const systemPrompt = `You are an AI assistant that helps edit assessment frameworks in the CompanyIQ platform. You can modify existing frameworks by adding, removing, or editing measures.
+
+CURRENT FRAMEWORK:
+Name: ${framework.name}
+ID: ${frameworkId}
+Measures (${measures.length} total):
+${measures.map((m: any, i: number) => `  ${i + 1}. [${m.measureId}] ${m.title} (Category: ${m.category || "Uncategorized"})`).join("\n")}
+
+You can perform the following ACTIONS by including a JSON action block in your response:
+
+1. DELETE measures:
+\`\`\`action
+{"type": "delete", "measureIds": ["measure-id-1", "measure-id-2"]}
+\`\`\`
+
+2. ADD measures:
+\`\`\`action
+{"type": "add", "measures": [{"measureId": "new-id", "title": "Question?", "definition": "...", "category": "Category Name", "scoringGuidance": {"yes": "...", "no": "...", "partial": "..."}, "evidenceKeywords": ["..."]}]}
+\`\`\`
+
+3. EDIT measures:
+\`\`\`action
+{"type": "edit", "edits": [{"measureId": "existing-id", "updates": {"title": "New title?", "definition": "New definition"}}]}
+\`\`\`
+
+4. RENAME framework:
+\`\`\`action
+{"type": "rename", "name": "New Framework Name"}
+\`\`\`
+
+IMPORTANT RULES:
+- Always confirm what you're about to do before including the action block
+- If the user says to go ahead or confirms, include the action block in your response
+- If the user's intent is clear and unambiguous (e.g., "remove questions 5 and 6"), you MAY include the action block immediately
+- You can include MULTIPLE action blocks in one response if needed
+- After performing actions, summarize what was changed
+- When referencing measures, use their number from the list above or their measureId
+- Be helpful and suggest improvements when appropriate`;
+
+    const conversationPrompt = messages.map((m: { role: string; content: string }) =>
+      `${m.role === "user" ? "USER" : "ASSISTANT"}: ${m.content}`
+    ).join("\n\n");
+
+    const { text } = await completeWithFallback("deepseek", {
+      system: systemPrompt,
+      prompt: conversationPrompt,
+      maxTokens: 8000,
+    });
+
+    // Parse and execute any action blocks
+    const actions: any[] = [];
+    const actionRegex = /```action\s*([\s\S]*?)```/g;
+    let match;
+    while ((match = actionRegex.exec(text)) !== null) {
+      try {
+        actions.push(JSON.parse(match[1].trim()));
+      } catch {}
+    }
+
+    const executedActions: string[] = [];
+
+    for (const action of actions) {
+      try {
+        if (action.type === "delete" && Array.isArray(action.measureIds)) {
+          for (const measureId of action.measureIds) {
+            await storage.deleteMeasure(frameworkId, measureId);
+            executedActions.push(`Deleted measure: ${measureId}`);
+          }
+        } else if (action.type === "add" && Array.isArray(action.measures)) {
+          for (const m of action.measures) {
+            await storage.createMeasure({ ...m, frameworkId });
+            executedActions.push(`Added measure: ${m.measureId} - ${m.title}`);
+          }
+        } else if (action.type === "edit" && Array.isArray(action.edits)) {
+          for (const edit of action.edits) {
+            await storage.updateMeasure(frameworkId, edit.measureId, edit.updates);
+            executedActions.push(`Updated measure: ${edit.measureId}`);
+          }
+        } else if (action.type === "rename" && action.name) {
+          await storage.updateFramework(frameworkId, { name: action.name });
+          executedActions.push(`Renamed framework to: ${action.name}`);
+        }
+      } catch (err: any) {
+        executedActions.push(`Error: ${err.message}`);
+      }
+    }
+
+    res.json({
+      message: text,
+      actions: executedActions,
+      hasChanges: executedActions.length > 0,
+    });
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
 // Legacy endpoint (kept for backward compat)
 router.post("/draft", async (req: Request, res: Response) => {
   try {

@@ -61,6 +61,14 @@ export const api = {
   deleteFramework: (id: number) => request(`/frameworks/${id}`, { method: "DELETE" }),
   bulkCreateMeasures: (frameworkId: number, measures: any[]) =>
     request(`/frameworks/${frameworkId}/measures/bulk`, { method: "POST", body: JSON.stringify({ measures }) }),
+  deleteMeasure: (frameworkId: number, measureId: string) =>
+    request(`/frameworks/${frameworkId}/measures/${measureId}`, { method: "DELETE" }),
+  updateMeasure: (frameworkId: number, measureId: string, data: any) =>
+    request(`/frameworks/${frameworkId}/measures/${measureId}`, { method: "PATCH", body: JSON.stringify(data) }),
+  createMeasure: (frameworkId: number, data: any) =>
+    request(`/frameworks/${frameworkId}/measures`, { method: "POST", body: JSON.stringify(data) }),
+  chatFrameworkEditor: (messages: Array<{role: string; content: string}>, frameworkId: number) =>
+    request("/framework-builder/edit", { method: "POST", body: JSON.stringify({ messages, frameworkId }) }),
   draftFramework: (data: any) => request("/framework-builder/draft", { method: "POST", body: JSON.stringify(data) }),
   chatFrameworkBuilder: (messages: Array<{role: string; content: string}>, currentDraft?: any, fileContext?: Array<{filename: string; content: string}>) =>
     request("/framework-builder/chat", { method: "POST", body: JSON.stringify({ messages, currentDraft, fileContext }) }),

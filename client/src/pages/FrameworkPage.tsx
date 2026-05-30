@@ -1,12 +1,14 @@
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { api } from "../lib/api";
-import { Plus, Trash2, CheckCircle2, Edit2, Save, X, ChevronDown, ChevronRight } from "lucide-react";
+import { Trash2, CheckCircle2, ChevronDown, ChevronRight, MessageSquare } from "lucide-react";
+import FrameworkEditorChat from "../components/FrameworkEditorChat";
 
 export default function FrameworkPage() {
   const queryClient = useQueryClient();
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const [expandedCategories, setExpandedCategories] = useState<Set<string>>(new Set());
+  const [showEditor, setShowEditor] = useState(false);
 
   const { data: frameworks = [] } = useQuery({
     queryKey: ["frameworks"],
@@ -29,6 +31,7 @@ export default function FrameworkPage() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["frameworks"] });
       setSelectedId(null);
+      setShowEditor(false);
     },
   });
 
@@ -58,7 +61,7 @@ export default function FrameworkPage() {
         {frameworks.map((fw: any) => (
           <div
             key={fw.id}
-            onClick={() => setSelectedId(fw.id)}
+            onClick={() => { setSelectedId(fw.id); setShowEditor(false); }}
             className={`bg-white rounded-lg border p-4 cursor-pointer transition-all ${
               selectedId === fw.id ? "ring-2 ring-blue-500 border-blue-500" : "hover:border-gray-400"
             }`}
@@ -105,47 +108,72 @@ export default function FrameworkPage() {
         )}
       </div>
 
-      {/* Framework Detail */}
+      {/* Framework Detail + AI Editor */}
       {frameworkDetail && (
-        <div className="bg-white rounded-lg border">
-          <div className="px-4 py-3 border-b">
-            <h2 className="font-semibold text-gray-900">{frameworkDetail.name}</h2>
-            <p className="text-sm text-gray-500 mt-1">{measures.length} measures in {Object.keys(categories).length} categories</p>
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+          {/* Left: Measures list */}
+          <div className="bg-white rounded-lg border">
+            <div className="px-4 py-3 border-b flex items-center justify-between">
+              <div>
+                <h2 className="font-semibold text-gray-900">{frameworkDetail.name}</h2>
+                <p className="text-sm text-gray-500 mt-1">{measures.length} measures in {Object.keys(categories).length} categories</p>
+              </div>
+              <button
+                onClick={() => setShowEditor(!showEditor)}
+                className={`flex items-center gap-1.5 px-3 py-1.5 text-sm rounded-lg transition-all ${
+                  showEditor
+                    ? "bg-blue-600 text-white"
+                    : "bg-blue-50 text-blue-600 hover:bg-blue-100"
+                }`}
+              >
+                <MessageSquare className="w-4 h-4" />
+                {showEditor ? "Close Editor" : "AI Editor"}
+              </button>
+            </div>
+
+            <div className="divide-y max-h-[600px] overflow-y-auto">
+              {Object.entries(categories)
+                .sort(([, a]: any, [, b]: any) => (a[0]?.categoryNumber || 0) - (b[0]?.categoryNumber || 0))
+                .map(([category, catMeasures]) => {
+                  const measures = catMeasures as any[];
+                  const isExpanded = expandedCategories.has(category);
+                  return (
+                    <div key={category}>
+                      <button
+                        onClick={() => toggleCategory(category)}
+                        className="w-full flex items-center justify-between px-4 py-3 hover:bg-gray-50"
+                      >
+                        <div className="flex items-center gap-2">
+                          {isExpanded ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
+                          <span className="text-sm font-medium">{category}</span>
+                        </div>
+                        <span className="text-xs text-gray-400">{measures.length} measures</span>
+                      </button>
+                      {isExpanded && (
+                        <div className="px-4 pb-3 space-y-2">
+                          {measures.map((m: any) => (
+                            <div key={m.measureId} className="pl-6 py-2 border-l-2 border-gray-200">
+                              <p className="text-sm text-gray-800">{m.title}</p>
+                              {m.definition && <p className="text-xs text-gray-500 mt-0.5">{m.definition}</p>}
+                              <p className="text-xs text-gray-400 mt-0.5">ID: {m.measureId}</p>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+            </div>
           </div>
 
-          <div className="divide-y">
-            {Object.entries(categories)
-              .sort(([, a]: any, [, b]: any) => (a[0]?.categoryNumber || 0) - (b[0]?.categoryNumber || 0))
-              .map(([category, catMeasures]) => {
-                const measures = catMeasures as any[];
-                const isExpanded = expandedCategories.has(category);
-                return (
-                  <div key={category}>
-                    <button
-                      onClick={() => toggleCategory(category)}
-                      className="w-full flex items-center justify-between px-4 py-3 hover:bg-gray-50"
-                    >
-                      <div className="flex items-center gap-2">
-                        {isExpanded ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
-                        <span className="text-sm font-medium">{category}</span>
-                      </div>
-                      <span className="text-xs text-gray-400">{measures.length} measures</span>
-                    </button>
-                    {isExpanded && (
-                      <div className="px-4 pb-3 space-y-2">
-                        {measures.map((m: any) => (
-                          <div key={m.measureId} className="pl-6 py-2 border-l-2 border-gray-200">
-                            <p className="text-sm text-gray-800">{m.title}</p>
-                            {m.definition && <p className="text-xs text-gray-500 mt-0.5">{m.definition}</p>}
-                            <p className="text-xs text-gray-400 mt-0.5">ID: {m.measureId}</p>
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                );
-              })}
-          </div>
+          {/* Right: AI Editor Chat */}
+          {showEditor && (
+            <FrameworkEditorChat
+              frameworkId={selectedId!}
+              frameworkName={frameworkDetail.name}
+              onClose={() => setShowEditor(false)}
+            />
+          )}
         </div>
       )}
     </div>
