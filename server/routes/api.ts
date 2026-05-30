@@ -18,7 +18,7 @@ interface BatchState {
   running: boolean;
 }
 
-const batchState: BatchState = {
+export const batchState: BatchState = {
   cancelRequested: false,
   currentEpoch: 0,
   currentCompany: undefined,
@@ -388,7 +388,14 @@ router.post("/companies/:id/re-analyze", async (req: Request, res: Response) => 
 router.post("/companies/analyze-all", async (req: Request, res: Response) => {
   try {
     if (batchState.running) {
-      return res.status(409).json({ error: "A batch is already running" });
+      // Safety check: if in-memory flag says running but DB has no active batch, reset the flag
+      const activeBatch = await storage.getActiveBatchRun();
+      if (!activeBatch || activeBatch.status !== "running") {
+        batchState.running = false;
+        console.log("[Batch] Reset stale batchState.running flag (no active batch in DB)");
+      } else {
+        return res.status(409).json({ error: "A batch is already running" });
+      }
     }
 
     // Accept optional frameworkId — if not provided, use active framework

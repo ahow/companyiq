@@ -4,7 +4,7 @@ import path from "path";
 import crypto from "crypto";
 import { fileURLToPath } from "url";
 import { runStartupMigrations } from "./db.js";
-import apiRouter from "./routes/api.js";
+import apiRouter, { batchState } from "./routes/api.js";
 import frameworkBuilderRouter from "./routes/framework-builder.js";
 import { storage } from "./storage.js";
 import { runAnalysisPipeline } from "./lib/pipeline.js";
@@ -157,6 +157,7 @@ async function executeJob(job: any): Promise<void> {
         const batch = await storage.incrementBatchCompleted(job.batchId);
         if (batch.completedJobs + batch.failedJobs >= batch.totalJobs) {
           await storage.completeBatchRun(batch.id);
+          batchState.running = false;
           console.log(`[${WORKER_ID}] Batch ${batch.id} completed`);
           // Auto-save analysis results
           await saveAnalysisResults(batch.id, job.frameworkId!);
@@ -173,6 +174,7 @@ async function executeJob(job: any): Promise<void> {
       const batch = await storage.incrementBatchFailed(job.batchId);
       if (batch.completedJobs + batch.failedJobs >= batch.totalJobs) {
         await storage.completeBatchRun(batch.id);
+        batchState.running = false;
         // Auto-save analysis results even if some failed
         await saveAnalysisResults(batch.id, job.frameworkId!);
       }

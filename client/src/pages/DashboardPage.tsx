@@ -42,6 +42,9 @@ export default function DashboardPage() {
   const analyzeAllMutation = useMutation({
     mutationFn: (opts?: { listId?: number; frameworkId?: number }) => api.analyzeAll(opts),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["batchStatus"] }),
+    onError: (error: any) => {
+      alert(`Analysis failed to start: ${error.message}`);
+    },
   });
 
   const cancelBatchMutation = useMutation({
