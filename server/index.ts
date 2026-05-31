@@ -184,7 +184,17 @@ async function executeJob(job: any): Promise<void> {
   }
 }
 
+// Guard against concurrent saves for the same batch
+const savingBatches = new Set<number>();
+
 async function saveAnalysisResults(batchId: number, frameworkId: number): Promise<void> {
+  // Prevent duplicate saves from concurrent job completions
+  if (savingBatches.has(batchId)) {
+    console.log(`[${WORKER_ID}] Skipping duplicate save for batch ${batchId}`);
+    return;
+  }
+  savingBatches.add(batchId);
+
   try {
     const framework = await storage.getFramework(frameworkId);
     if (!framework) return;
@@ -261,6 +271,7 @@ async function saveAnalysisResults(batchId: number, frameworkId: number): Promis
   } catch (error: any) {
     console.error(`[${WORKER_ID}] Failed to save analysis results:`, error.message);
   }
+  // Note: intentionally NOT removing from savingBatches to prevent any late arrivals from saving again
 }
 
 async function tryClaimAndProcess(): Promise<boolean> {
