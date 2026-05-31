@@ -65,6 +65,29 @@ export default function FrameworkBuilderPage() {
     mutationFn: async () => {
       if (!draft) throw new Error("No framework draft to save");
 
+      // Handle trusted sources: create any new ones and collect IDs
+      let trustedSourceIds: number[] = [];
+      if (draft.trustedSources && draft.trustedSources.length > 0) {
+        // Get existing trusted sources to avoid duplicates
+        const existingSources = await api.getTrustedSources();
+        const existingDomains = new Map(existingSources.map((s: any) => [s.domain.toLowerCase(), s.id]));
+
+        for (const src of draft.trustedSources) {
+          const domain = src.domain.toLowerCase().replace(/^www\./, '');
+          if (existingDomains.has(domain)) {
+            trustedSourceIds.push(existingDomains.get(domain)!);
+          } else {
+            // Create new trusted source
+            const newSource = await api.createTrustedSource({
+              domain: domain,
+              description: `${src.name}${src.reason ? ' - ' + src.reason : ''}`,
+            });
+            trustedSourceIds.push(newSource.id);
+            existingDomains.set(domain, newSource.id);
+          }
+        }
+      }
+
       // Create framework with all metadata
       const fw = await api.createFramework({
         name: draft.name,
@@ -73,6 +96,7 @@ export default function FrameworkBuilderPage() {
         searchTemplates: draft.searchTemplates || null,
         negativeKeywords: draft.negativeKeywords || null,
         negativeDomains: draft.negativeDomains || null,
+        trustedSourceIds: trustedSourceIds.length > 0 ? trustedSourceIds : null,
       });
 
       // Create measures from categories
@@ -304,7 +328,7 @@ export default function FrameworkBuilderPage() {
                 Framework draft ready: <strong>{draft.name}</strong>
               </p>
               <p className="text-xs text-green-600 mt-0.5">
-                {draft.categories?.length} categories, {draft.categories?.reduce((sum: number, c: any) => sum + c.measures.length, 0)} measures
+                {draft.categories?.length} categories, {draft.categories?.reduce((sum: number, c: any) => sum + c.measures.length, 0)} measures{draft.trustedSources?.length ? `, ${draft.trustedSources.length} trusted sources` : ''}
               </p>
             </div>
             <div className="flex gap-2">

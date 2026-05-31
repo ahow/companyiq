@@ -243,6 +243,9 @@ export async function runStartupMigrations(): Promise<void> {
       );
       CREATE INDEX IF NOT EXISTS analysis_results_completed_at_idx ON analysis_results(completed_at);
       CREATE UNIQUE INDEX IF NOT EXISTS analysis_results_share_token_idx ON analysis_results(share_token);
+
+      -- Migration: add trusted_source_ids to frameworks
+      ALTER TABLE frameworks ADD COLUMN IF NOT EXISTS trusted_source_ids JSONB;
     `);
 
     console.log("[DB] Startup migrations completed successfully");

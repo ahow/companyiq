@@ -120,6 +120,20 @@ YOUR BEHAVIOR:
   (d) Well-structured — measures are logically grouped and non-overlapping
   (e) Rigorous — scoring guidance is specific enough for consistent results
 
+TRUSTED SOURCES:
+The platform has a catalog of trusted disclosure sources that can be assigned to frameworks. When generating a framework, you MUST suggest 5-20 relevant trusted sources from this catalog AND/OR suggest new ones. These sources will be searched specifically during company analysis.
+
+Available source categories:
+- Statutory/securities filing repositories: SEC EDGAR, UK FCA NSM, Companies House, SEDAR+, EDINET, HKEXnews, ASX, etc.
+- UK-specific statutory: Modern Slavery Registry, Gender Pay Gap Service, FCA SDR
+- Country-specific ESG registries: Australia Modern Slavery Register, Canada Bill S-211, US EPA TRI, EU E-PRTR, French Devoir de Vigilance, etc.
+- Voluntary global frameworks: CDP, TNFD, SBTi, SBTN, UN Global Compact
+- Finance-sector pledges: NZAM, NZAOA, PRI, UNEP FI PRB/PSI, Equator Principles, PCAF, etc.
+- UN-backed campaigns: Race to Zero, Race to Resilience, RE100, EV100, EP100, UN WEPs
+- Sector-specific registries: EITI, ICMM, RSPO, FSC, PEFC, IRMA, ASI, Bonsucro, etc.
+- Certification registries: B Corp, IAF CertSearch, LEED, BREEAM, WELL, ResponsibleSteel, etc.
+- National companies registers: EU BRIS, Handelsregister, data.inpi.fr, KvK, etc.
+
 WHEN YOU HAVE ENOUGH INFORMATION, generate the complete framework as a JSON block in your response. The JSON must follow this exact structure:
 \`\`\`json
 {
@@ -128,6 +142,10 @@ WHEN YOU HAVE ENOUGH INFORMATION, generate the complete framework as a JSON bloc
   "searchTemplates": ["{company} sustainability report AI governance", "{company} artificial intelligence policy"],
   "negativeKeywords": ["keywords that indicate irrelevant documents"],
   "negativeDomains": ["domains to exclude"],
+  "trustedSources": [
+    {"domain": "cdp.net", "name": "CDP", "reason": "Why this source is relevant to this framework"},
+    {"domain": "sec.gov", "name": "SEC EDGAR", "reason": "Why this source is relevant"}
+  ],
   "categories": [
     {
       "name": "Category Name",
@@ -160,6 +178,7 @@ IMPORTANT RULES:
 - Include evidenceKeywords for every measure (5-10 keywords each)
 - Aim for 15-30 measures grouped into 4-7 categories unless the user specifies otherwise
 - After generating, ask if the user wants to refine any measures, add categories, or adjust scope
+- ALWAYS include a "trustedSources" array in the JSON with 5-20 relevant sources. Include both sources from the catalog AND any additional sources you think are relevant (mark new suggestions clearly with a note in the reason field)
 
 QUALITY CHECKLIST (mention this to the user when appropriate):
 - [ ] Topic description is 150+ words covering scope, evidence types, standards, and exclusions
@@ -171,6 +190,7 @@ QUALITY CHECKLIST (mention this to the user when appropriate):
 - [ ] All measures are answerable from public corporate disclosures
 - [ ] Categories are logically grouped
 - [ ] Search templates are targeted and effective
+- [ ] Trusted sources are selected (5-20 relevant disclosure platforms)
 
 ${currentDraft ? `\nCURRENT DRAFT STATE:\n${JSON.stringify(currentDraft, null, 2)}\n\nThe user may want to refine this draft. Help them improve it.` : ""}
 
@@ -255,6 +275,18 @@ You can perform the following ACTIONS by including a JSON action block in your r
 {"type": "rename", "name": "New Framework Name"}
 \`\`\`
 
+5. ADD TRUSTED SOURCES (these are disclosure platforms searched during analysis):
+\`\`\`action
+{"type": "add_sources", "sources": [{"domain": "cdp.net", "name": "CDP", "description": "Climate disclosure platform"}]}
+\`\`\`
+
+6. REMOVE TRUSTED SOURCES:
+\`\`\`action
+{"type": "remove_sources", "domains": ["cdp.net"]}
+\`\`\`
+
+Current trusted sources for this framework: ${framework.trustedSourceIds ? `IDs: ${JSON.stringify(framework.trustedSourceIds)}` : "None configured"}
+
 IMPORTANT RULES:
 - Always confirm what you're about to do before including the action block
 - If the user says to go ahead or confirms, include the action block in your response
@@ -306,6 +338,33 @@ IMPORTANT RULES:
         } else if (action.type === "rename" && action.name) {
           await storage.updateFramework(frameworkId, { name: action.name });
           executedActions.push(`Renamed framework to: ${action.name}`);
+        } else if (action.type === "add_sources" && Array.isArray(action.sources)) {
+          const existingSources = await storage.getTrustedSources();
+          const existingDomains = new Map(existingSources.map((s: any) => [s.domain.toLowerCase(), s.id]));
+          const currentIds: number[] = (framework.trustedSourceIds as number[]) || [];
+          for (const src of action.sources) {
+            const domain = src.domain.toLowerCase().replace(/^www\./, '');
+            let sourceId: number;
+            if (existingDomains.has(domain)) {
+              sourceId = existingDomains.get(domain)!;
+            } else {
+              const newSource = await storage.createTrustedSource({ domain, description: src.description || src.name });
+              sourceId = newSource.id;
+            }
+            if (!currentIds.includes(sourceId)) {
+              currentIds.push(sourceId);
+            }
+          }
+          await storage.updateFramework(frameworkId, { trustedSourceIds: currentIds });
+          executedActions.push(`Added ${action.sources.length} trusted sources to framework`);
+        } else if (action.type === "remove_sources" && Array.isArray(action.domains)) {
+          const existingSources = await storage.getTrustedSources();
+          const domainToId = new Map(existingSources.map((s: any) => [s.domain.toLowerCase(), s.id]));
+          const currentIds: number[] = (framework.trustedSourceIds as number[]) || [];
+          const removeIds = action.domains.map((d: string) => domainToId.get(d.toLowerCase())).filter(Boolean);
+          const newIds = currentIds.filter((id: number) => !removeIds.includes(id));
+          await storage.updateFramework(frameworkId, { trustedSourceIds: newIds });
+          executedActions.push(`Removed ${action.domains.length} trusted sources from framework`);
         }
       } catch (err: any) {
         executedActions.push(`Error: ${err.message}`);

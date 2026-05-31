@@ -64,6 +64,7 @@ export const frameworks = pgTable("frameworks", {
   negativeDomains: jsonb("negative_domains").$type<string[]>(),
   knownDisclosureUrls: jsonb("known_disclosure_urls").$type<string[]>(),
   searchTemplates: jsonb("search_templates").$type<string[]>(),
+  trustedSourceIds: jsonb("trusted_source_ids").$type<number[]>(),
   isActive: boolean("is_active").default(false).notNull(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),

@@ -146,9 +146,62 @@ function calculatePriority(
     priority -= 8;
   }
 
-  // Regulator domain bonus
-  const regulatorDomains = ["sec.gov", "fca.org.uk", "esma.europa.eu", "asic.gov.au"];
-  if (regulatorDomains.some((d) => urlLower.includes(d))) {
+  // Trusted disclosure platform bonus (Tier 1: priority domains from curated sources list)
+  // These are statutory filing repositories, ESG registries, voluntary frameworks,
+  // certification registries, and national company registers
+  const priorityDomains = [
+    // Statutory / securities filing repositories
+    "sec.gov", "efts.sec.gov", "fca.org.uk", "data.fca.org.uk",
+    "find-and-update.company-information.service.gov.uk", "esap.europa.eu",
+    "registers.esma.europa.eu", "unternehmensregister.de", "fsma.be",
+    "info-financiere.fr", "data.inpi.fr", "1info.it", "cnmv.es",
+    "afm.nl", "dl.bourse.lu", "web3.cmvm.pt", "rss.knf.gov.pl",
+    "direct.euronext.com", "bolagsverket.se", "brreg.no", "datacvr.virk.dk",
+    "tietopalvelu.ytj.fi", "zefix.ch", "core.cro.ie", "kbopub.economie.fgov.be",
+    "registradores.org", "registroimprese.it", "kvk.nl", "handelsregister.de",
+    "e-justice.europa.eu", "sedarplus.ca", "connectonline.asic.gov.au",
+    "asx.com.au", "www1.hkexnews.hk", "disclosure2.edinet-fsa.go.jp",
+    "release.tdnet.info", "kind.krx.co.kr", "mops.twse.com.tw",
+    "sgx.com", "bseindia.com", "nseindia.com", "sebi.gov.in",
+    "cninfo.com.cn", "sse.com.cn", "gsxt.gov.cn", "maya.tase.co.il",
+    "saudiexchange.sa", "adx.ae", "dfm.ae", "kap.org.tr",
+    "clientportal.jse.co.za", "b3.com.br", "rad.cvm.gov.br", "mca.gov.in",
+    // UK-specific statutory ESG
+    "modern-slavery-statement-registry.service.gov.uk",
+    "gender-pay-gap.service.gov.uk", "gov.uk",
+    // Country-specific ESG registries
+    "modernslaveryregister.gov.au", "wgea.gov.au",
+    "natural-resources.canada.ca", "publicsafety.gc.ca",
+    "enviro.epa.gov", "industry.eea.europa.eu", "eea.europa.eu",
+    "environment.data.gov.uk", "ec.europa.eu", "ww2.arb.ca.gov",
+    "hatvp.fr", "lda.senate.gov", "fec.gov",
+    "transparency-register.europa.eu",
+    // Voluntary global frameworks
+    "cdp.net", "tnfd.global", "sciencebasedtargets.org",
+    "sciencebasedtargetsnetwork.org", "unglobalcompact.org",
+    // Finance-sector pledges
+    "netzeroassetmanagers.org", "unepfi.org", "unpri.org",
+    "equator-principles.com", "financeforbiodiversity.org",
+    "frc.org.uk", "fsa.go.jp", "carbonaccountingfinancials.com",
+    // UN-backed campaigns
+    "climateaction.unfccc.int", "there100.org", "theclimategroup.org", "weps.org",
+    // Sector-specific & certification registries
+    "eiti.org", "icmm.com", "rspo.org", "search.fsc.org", "connect.fsc.org",
+    "pefc.org", "responsiblesoy.org", "bonsucro.com", "rsb.org",
+    "responsiblemining.net", "aluminium-stewardship.org",
+    "responsiblesteel.org", "responsiblejewellery.com",
+    "bettercotton.org", "fisheries.msc.org", "asc-aqua.org",
+    "knowledge.rainforest-alliance.org", "flocert.net", "goodweave.org",
+    "fairlabor.org", "iafcertsearch.org",
+    // Certification & verified-status registries
+    "bcorporation.net", "usgbc.org", "tools.breeam.com",
+    "account.wellcertified.com", "dgnb.de",
+    // Human rights & social
+    "hrc.org", "disabilityin.org", "ungpreporting.org",
+    // Other regulatory/reporting
+    "oecd.org",
+  ];
+  if (priorityDomains.some((d) => urlLower.includes(d))) {
     priority -= 4;
   }
 
@@ -359,11 +412,19 @@ export async function searchCompanyDocuments(opts: {
     }
   }
 
-  // Lane 3: Trusted source search
-  if (trustedSources.length > 0) {
-    console.log(`[${companyName}] Running trusted source search lane`);
-    const tsQueries = buildTrustedSourceQueries(companyName, trustedSources);
-    for (const query of tsQueries.slice(0, 5)) {
+  // Lane 3: Trusted source search (framework-specific sources take priority)
+  const frameworkSourceIds = framework.trustedSourceIds as number[] | null;
+  let effectiveSources = trustedSources;
+  if (frameworkSourceIds && frameworkSourceIds.length > 0) {
+    // Use framework-specific sources if configured, otherwise fall back to global list
+    effectiveSources = trustedSources.filter((s) => frameworkSourceIds.includes(s.id));
+    if (effectiveSources.length === 0) effectiveSources = trustedSources; // fallback
+  }
+  if (effectiveSources.length > 0) {
+    console.log(`[${companyName}] Running trusted source search lane (${effectiveSources.length} sources)`);
+    const tsQueries = buildTrustedSourceQueries(companyName, effectiveSources);
+    // Allow up to 15 trusted source queries per company (increased from 5)
+    for (const query of tsQueries.slice(0, 15)) {
       const results = await webSearch(query, { num: 5 });
       for (const r of results) addCandidate(r, "trusted");
     }

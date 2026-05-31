@@ -1,0 +1,842 @@
+[
+  {
+    "name": "SEC EDGAR",
+    "domain": "sec.gov",
+    "url": "https://www.sec.gov/cgi-bin/browse-edgar",
+    "description": "Company-filed 10-K/10-Q/8-K/20-F/proxy filings; full-text since 2001",
+    "category": "A. Statutory / securities filing repositories"
+  },
+  {
+    "name": "UK FCA National Storage Mechanism",
+    "domain": "data.fca.org.uk",
+    "url": "https://data.fca.org.uk/#/nsm/nationalstoragemechanism",
+    "description": "Regulated-issuer annual/half-year reports, RNS announcements",
+    "category": "A. Statutory / securities filing repositories"
+  },
+  {
+    "name": "UK Companies House",
+    "domain": "find-and-update.company-information.service.gov.uk",
+    "url": "https://find-and-update.company-information.service.gov.uk/",
+    "description": "Statutory accounts, confirmation statements, filing history",
+    "category": "A. Statutory / securities filing repositories"
+  },
+  {
+    "name": "EU ESAP",
+    "domain": "esap.europa.eu",
+    "url": "https://esap.europa.eu",
+    "description": "Will centralise Transparency/Prospectus filings, then ESG/CSRD from Jan 2028",
+    "category": "A. Statutory / securities filing repositories"
+  },
+  {
+    "name": "EU OAMs / ESMA",
+    "domain": "registers.esma.europa.eu",
+    "url": "https://registers.esma.europa.eu/",
+    "description": "Directory of national OAMs/regulated info",
+    "category": "A. Statutory / securities filing repositories"
+  },
+  {
+    "name": "Bundesanzeiger / Unternehmensregister",
+    "domain": "unternehmensregister.de",
+    "url": "https://www.unternehmensregister.de/ureg/",
+    "description": "German statutory accounts, annual financial reports",
+    "category": "A. Statutory / securities filing repositories"
+  },
+  {
+    "name": "STORI / FSMA (Belgium)",
+    "domain": "fsma.be",
+    "url": "https://www.fsma.be/en/stori",
+    "description": "Regulated-info filings of Belgian listed issuers",
+    "category": "A. Statutory / securities filing repositories"
+  },
+  {
+    "name": "info-financiere.fr / AMF (France)",
+    "domain": "info-financiere.fr",
+    "url": "https://www.info-financiere.fr/",
+    "description": "Regulated info, prospectuses, PRs of French issuers",
+    "category": "A. Statutory / securities filing repositories"
+  },
+  {
+    "name": "INFOGREFFE \u2192 data.inpi.fr",
+    "domain": "data.inpi.fr",
+    "url": "https://data.inpi.fr/",
+    "description": "Company annual accounts (comptes annuels), statutes/acts",
+    "category": "A. Statutory / securities filing repositories"
+  },
+  {
+    "name": "1Info / CONSOB (Italy)",
+    "domain": "1info.it",
+    "url": "https://www.1info.it/",
+    "description": "Italian issuers' regulated info/financial reports",
+    "category": "A. Statutory / securities filing repositories"
+  },
+  {
+    "name": "CNMV (Spain)",
+    "domain": "cnmv.es",
+    "url": "https://www.cnmv.es/portal/consultas/busquedaporentidad.aspx",
+    "description": "Spanish issuers' regulated filings (OIR)",
+    "category": "A. Statutory / securities filing repositories"
+  },
+  {
+    "name": "AFM register (Netherlands)",
+    "domain": "afm.nl",
+    "url": "https://www.afm.nl/en/sector/registers",
+    "description": "Dutch regulated-info filings",
+    "category": "A. Statutory / securities filing repositories"
+  },
+  {
+    "name": "LuxSE OAM (Luxembourg)",
+    "domain": "dl.bourse.lu",
+    "url": "https://dl.bourse.lu/",
+    "description": "Luxembourg OAM regulated info filings",
+    "category": "A. Statutory / securities filing repositories"
+  },
+  {
+    "name": "CMVM (Portugal)",
+    "domain": "web3.cmvm.pt",
+    "url": "https://web3.cmvm.pt/sdi/emitentes/",
+    "description": "Portuguese issuers' disclosures",
+    "category": "A. Statutory / securities filing repositories"
+  },
+  {
+    "name": "KNF OAM (Poland)",
+    "domain": "rss.knf.gov.pl",
+    "url": "https://rss.knf.gov.pl/",
+    "description": "Polish regulated-info filings (ESPI/RSS)",
+    "category": "A. Statutory / securities filing repositories"
+  },
+  {
+    "name": "Euronext OAM Dublin (Ireland)",
+    "domain": "direct.euronext.com",
+    "url": "https://direct.euronext.com/Disclosure/",
+    "description": "Irish/Euronext issuers' regulated info",
+    "category": "A. Statutory / securities filing repositories"
+  },
+  {
+    "name": "SEDAR+ (Canada)",
+    "domain": "sedarplus.ca",
+    "url": "https://www.sedarplus.ca/",
+    "description": "Canadian issuer filings (AIFs, MD&A, financials)",
+    "category": "A. Statutory / securities filing repositories"
+  },
+  {
+    "name": "EDINET (Japan)",
+    "domain": "disclosure2.edinet-fsa.go.jp",
+    "url": "https://disclosure2.edinet-fsa.go.jp/",
+    "description": "Statutory securities reports (yuho), XBRL",
+    "category": "A. Statutory / securities filing repositories"
+  },
+  {
+    "name": "TDnet (Japan)",
+    "domain": "release.tdnet.info",
+    "url": "https://www.release.tdnet.info/inbs/I_main_00.html",
+    "description": "Timely-disclosure earnings reports of TSE issuers",
+    "category": "A. Statutory / securities filing repositories"
+  },
+  {
+    "name": "HKEXnews",
+    "domain": "www1.hkexnews.hk",
+    "url": "https://www1.hkexnews.hk/search/titlesearch.xhtml",
+    "description": "HK listed issuer announcements, annual/ESG reports",
+    "category": "A. Statutory / securities filing repositories"
+  },
+  {
+    "name": "China exchanges (SSE)",
+    "domain": "sse.com.cn",
+    "url": "http://www.sse.com.cn/disclosure/listedinfo/announcement/",
+    "description": "SSE listed-co disclosures (SZSE/BSE have parallel pages)",
+    "category": "A. Statutory / securities filing repositories"
+  },
+  {
+    "name": "Cninfo (China)",
+    "domain": "cninfo.com.cn",
+    "url": "http://www.cninfo.com.cn/",
+    "description": "CSRC-designated disclosure portal, all A-share filings",
+    "category": "A. Statutory / securities filing repositories"
+  },
+  {
+    "name": "SGX SGXNet (Singapore)",
+    "domain": "sgx.com",
+    "url": "https://www.sgx.com/securities/company-announcements",
+    "description": "SGX issuer announcements/financials",
+    "category": "A. Statutory / securities filing repositories"
+  },
+  {
+    "name": "NSE India",
+    "domain": "nseindia.com",
+    "url": "https://www.nseindia.com/companies-listing/corporate-filings-announcements",
+    "description": "NSE corporate filings/announcements",
+    "category": "A. Statutory / securities filing repositories"
+  },
+  {
+    "name": "BSE India",
+    "domain": "bseindia.com",
+    "url": "https://www.bseindia.com/corporates/ann.html",
+    "description": "BSE listing-centre announcements",
+    "category": "A. Statutory / securities filing repositories"
+  },
+  {
+    "name": "SEBI",
+    "domain": "sebi.gov.in",
+    "url": "https://www.sebi.gov.in/filings.html",
+    "description": "SEBI filings/offer documents",
+    "category": "A. Statutory / securities filing repositories"
+  },
+  {
+    "name": "ASIC (Australia)",
+    "domain": "connectonline.asic.gov.au",
+    "url": "https://connectonline.asic.gov.au/",
+    "description": "Company statutory documents",
+    "category": "A. Statutory / securities filing repositories"
+  },
+  {
+    "name": "ASX",
+    "domain": "asx.com.au",
+    "url": "https://www.asx.com.au/markets/trade-our-cash-market/announcements",
+    "description": "ASX market announcements",
+    "category": "A. Statutory / securities filing repositories"
+  },
+  {
+    "name": "KRX KIND (South Korea)",
+    "domain": "kind.krx.co.kr",
+    "url": "https://kind.krx.co.kr/",
+    "description": "Korean listed-co disclosures",
+    "category": "A. Statutory / securities filing repositories"
+  },
+  {
+    "name": "TWSE MOPS (Taiwan)",
+    "domain": "mops.twse.com.tw",
+    "url": "https://mops.twse.com.tw/mops/web/index",
+    "description": "Taiwan issuer filings (Market Observation Post System)",
+    "category": "A. Statutory / securities filing repositories"
+  },
+  {
+    "name": "JSE SENS (South Africa)",
+    "domain": "clientportal.jse.co.za",
+    "url": "https://clientportal.jse.co.za/communication/sens-announcements",
+    "description": "SENS company announcements",
+    "category": "A. Statutory / securities filing repositories"
+  },
+  {
+    "name": "B3 (Brazil)",
+    "domain": "b3.com.br",
+    "url": "https://www.b3.com.br/en_us/",
+    "description": "B3 issuer disclosures",
+    "category": "A. Statutory / securities filing repositories"
+  },
+  {
+    "name": "CVM (Brazil)",
+    "domain": "rad.cvm.gov.br",
+    "url": "https://www.rad.cvm.gov.br/ENET/frmConsultaExternaCVM.aspx",
+    "description": "Brazilian issuer statutory filings (DFP/ITR/reference form)",
+    "category": "A. Statutory / securities filing repositories"
+  },
+  {
+    "name": "ADX / DFM (UAE)",
+    "domain": "adx.ae",
+    "url": "https://www.adx.ae/en/products/equities/disclosures",
+    "description": "UAE issuer disclosures",
+    "category": "A. Statutory / securities filing repositories"
+  },
+  {
+    "name": "Saudi Tadawul",
+    "domain": "saudiexchange.sa",
+    "url": "https://www.saudiexchange.sa/wps/portal/saudiexchange/newsandreports/issuer-news",
+    "description": "Saudi issuer announcements/financials",
+    "category": "A. Statutory / securities filing repositories"
+  },
+  {
+    "name": "Turkey KAP",
+    "domain": "kap.org.tr",
+    "url": "https://www.kap.org.tr/en/",
+    "description": "Turkish issuer disclosures",
+    "category": "A. Statutory / securities filing repositories"
+  },
+  {
+    "name": "Israel MAYA (TASE)",
+    "domain": "maya.tase.co.il",
+    "url": "https://maya.tase.co.il/",
+    "description": "Israeli issuer disclosures",
+    "category": "A. Statutory / securities filing repositories"
+  },
+  {
+    "name": "UK Modern Slavery Statement Registry",
+    "domain": "modern-slavery-statement-registry.service.gov.uk",
+    "url": "https://modern-slavery-statement-registry.service.gov.uk/",
+    "description": "Company modern slavery statements (self-authored)",
+    "category": "C. UK-specific statutory"
+  },
+  {
+    "name": "UK Gender Pay Gap Service",
+    "domain": "gender-pay-gap.service.gov.uk",
+    "url": "https://gender-pay-gap.service.gov.uk/",
+    "description": "Employer-reported gender pay gap data",
+    "category": "C. UK-specific statutory"
+  },
+  {
+    "name": "UK SDR / FCA",
+    "domain": "fca.org.uk",
+    "url": "https://www.fca.org.uk/firms/climate-change-sustainable-finance/sustainability-disclosure-requirements",
+    "description": "FCA SDR guidance hub (filings live on NSM #2)",
+    "category": "C. UK-specific statutory"
+  },
+  {
+    "name": "Australia Modern Slavery Register",
+    "domain": "modernslaveryregister.gov.au",
+    "url": "https://modernslaveryregister.gov.au/statements/",
+    "description": "Company modern slavery statements",
+    "category": "Country-specific statutory ESG/workforce/tax/environmental registries"
+  },
+  {
+    "name": "Canada Bill S-211",
+    "domain": "publicsafety.gc.ca",
+    "url": "https://www.publicsafety.gc.ca/cnt/cntrng-crm/frcd-lbr-cndn-spply-chns/ctlg-en.aspx",
+    "description": "Forced/child labour supply-chain reports catalogue",
+    "category": "Country-specific statutory ESG/workforce/tax/environmental registries"
+  },
+  {
+    "name": "California SB253/SB261 (CARB)",
+    "domain": "ww2.arb.ca.gov",
+    "url": "https://ww2.arb.ca.gov/our-work/programs/climate-related-financial-risk-disclosure",
+    "description": "Climate disclosure program docket",
+    "category": "Country-specific statutory ESG/workforce/tax/environmental registries"
+  },
+  {
+    "name": "French HATVP lobbying register",
+    "domain": "hatvp.fr",
+    "url": "https://www.hatvp.fr/agora/",
+    "description": "Company lobbying activity declarations",
+    "category": "Country-specific statutory ESG/workforce/tax/environmental registries"
+  },
+  {
+    "name": "EU Transparency Register",
+    "domain": "transparency-register.europa.eu",
+    "url": "https://transparency-register.europa.eu/searchregister_en",
+    "description": "Lobbying org registrations/declarations",
+    "category": "Country-specific statutory ESG/workforce/tax/environmental registries"
+  },
+  {
+    "name": "UK Register of Consultant Lobbyists",
+    "domain": "orcl.my.site.com",
+    "url": "https://orcl.my.site.com/CompanySearch",
+    "description": "Consultant lobbyist registrations",
+    "category": "Country-specific statutory ESG/workforce/tax/environmental registries"
+  },
+  {
+    "name": "US Lobbying Disclosure (LDA)",
+    "domain": "lda.senate.gov",
+    "url": "https://lda.senate.gov/filings/public/filing/search/",
+    "description": "Company LDA lobbying filings",
+    "category": "Country-specific statutory ESG/workforce/tax/environmental registries"
+  },
+  {
+    "name": "US FEC corporate PAC",
+    "domain": "fec.gov",
+    "url": "https://www.fec.gov/data/committees/",
+    "description": "PAC disclosure filings",
+    "category": "Country-specific statutory ESG/workforce/tax/environmental registries"
+  },
+  {
+    "name": "WGEA (Australia)",
+    "domain": "wgea.gov.au",
+    "url": "https://www.wgea.gov.au/data-statistics/data-explorer",
+    "description": "Employer gender equality reports",
+    "category": "Country-specific statutory ESG/workforce/tax/environmental registries"
+  },
+  {
+    "name": "Canada ESTMA",
+    "domain": "natural-resources.canada.ca",
+    "url": "https://natural-resources.canada.ca/minerals-mining/extractive-sector-transparency-measures-act",
+    "description": "Extractive payment reports",
+    "category": "Country-specific statutory ESG/workforce/tax/environmental registries"
+  },
+  {
+    "name": "UK ESOS",
+    "domain": "gov.uk",
+    "url": "https://www.gov.uk/guidance/energy-savings-opportunity-scheme-esos",
+    "description": "ESOS compliance info",
+    "category": "Country-specific statutory ESG/workforce/tax/environmental registries"
+  },
+  {
+    "name": "US EPA TRI",
+    "domain": "enviro.epa.gov",
+    "url": "https://enviro.epa.gov/envirofacts/tri/search",
+    "description": "Facility-reported toxic chemical releases",
+    "category": "Country-specific statutory ESG/workforce/tax/environmental registries"
+  },
+  {
+    "name": "EU E-PRTR / Industrial Emissions Portal",
+    "domain": "industry.eea.europa.eu",
+    "url": "https://industry.eea.europa.eu/",
+    "description": "Facility-reported pollutant releases/transfers",
+    "category": "Country-specific statutory ESG/workforce/tax/environmental registries"
+  },
+  {
+    "name": "UK Environment Agency Pollution Inventory",
+    "domain": "environment.data.gov.uk",
+    "url": "https://environment.data.gov.uk/",
+    "description": "Facility-reported emissions",
+    "category": "Country-specific statutory ESG/workforce/tax/environmental registries"
+  },
+  {
+    "name": "CDP scores / A-list",
+    "domain": "cdp.net",
+    "url": "https://www.cdp.net/en/data/scores",
+    "description": "Company environmental scores/A-lists (~20k scored)",
+    "category": "Voluntary global frameworks"
+  },
+  {
+    "name": "TNFD adopter register",
+    "domain": "tnfd.global",
+    "url": "https://tnfd.global/engage/tnfd-adopters/",
+    "description": "Companies committed to nature disclosures",
+    "category": "Voluntary global frameworks"
+  },
+  {
+    "name": "SBTi Target Dashboard",
+    "domain": "sciencebasedtargets.org",
+    "url": "https://sciencebasedtargets.org/target-dashboard",
+    "description": "Validated targets/commitments + XLS download Science Based Targets Initiative (10,000 companies as of 22 Jan 2026)",
+    "category": "Voluntary global frameworks"
+  },
+  {
+    "name": "SBTN target validation",
+    "domain": "sciencebasedtargetsnetwork.org",
+    "url": "https://sciencebasedtargetsnetwork.org/companies/",
+    "description": "Companies with validated nature targets",
+    "category": "Voluntary global frameworks"
+  },
+  {
+    "name": "UN Global Compact participants",
+    "domain": "unglobalcompact.org",
+    "url": "https://unglobalcompact.org/what-is-gc/participants",
+    "description": "Participant directory + CoP disclosures (20,000+) UN Global Compact",
+    "category": "Voluntary global frameworks"
+  },
+  {
+    "name": "NZAM",
+    "domain": "netzeroassetmanagers.org",
+    "url": "https://www.netzeroassetmanagers.org/signatories/",
+    "description": "Signatory list + commitments",
+    "category": "Finance-sector pledges"
+  },
+  {
+    "name": "NZAOA",
+    "domain": "unepfi.org",
+    "url": "https://www.unepfi.org/net-zero-alliance/resources/",
+    "description": "Asset-owner signatories + target reports",
+    "category": "Finance-sector pledges"
+  },
+  {
+    "name": "FIT signatory directory",
+    "domain": "unepfi.org",
+    "url": "https://www.unepfi.org/",
+    "description": "Signatory directory",
+    "category": "Finance-sector pledges"
+  },
+  {
+    "name": "PRI Signatory Directory",
+    "domain": "unpri.org",
+    "url": "https://www.unpri.org/signatories/signatory-resources/signatory-directory",
+    "description": "Signatories + Transparency Reports",
+    "category": "Finance-sector pledges"
+  },
+  {
+    "name": "UNEP FI PRB",
+    "domain": "unepfi.org",
+    "url": "https://www.unepfi.org/banking/responsible-banking-signatories/",
+    "description": "Bank signatories + self-reported progress",
+    "category": "Finance-sector pledges"
+  },
+  {
+    "name": "UNEP FI PSI",
+    "domain": "unepfi.org",
+    "url": "https://www.unepfi.org/insurance/psi-signatories/",
+    "description": "Insurer signatories + disclosures",
+    "category": "Finance-sector pledges"
+  },
+  {
+    "name": "Equator Principles",
+    "domain": "equator-principles.com",
+    "url": "https://equator-principles.com/members-reporting/",
+    "description": "EPFI members + implementation reporting",
+    "category": "Finance-sector pledges"
+  },
+  {
+    "name": "Finance for Biodiversity Pledge",
+    "domain": "financeforbiodiversity.org",
+    "url": "https://www.financeforbiodiversity.org/signatories/",
+    "description": "Signatory financial institutions",
+    "category": "Finance-sector pledges"
+  },
+  {
+    "name": "UK Stewardship Code (FRC)",
+    "domain": "frc.org.uk",
+    "url": "https://www.frc.org.uk/library/standards-codes-policy/stewardship/uk-stewardship-code-signatories/",
+    "description": "Successful signatories + stewardship reports",
+    "category": "Finance-sector pledges"
+  },
+  {
+    "name": "Japan Stewardship Code (FSA)",
+    "domain": "fsa.go.jp",
+    "url": "https://www.fsa.go.jp/en/refer/councils/stewardship/list/",
+    "description": "Signatory institutions",
+    "category": "Finance-sector pledges"
+  },
+  {
+    "name": "PCAF",
+    "domain": "carbonaccountingfinancials.com",
+    "url": "https://carbonaccountingfinancials.com/financial-institutions-taking-action",
+    "description": "FIs committed + disclosures",
+    "category": "Finance-sector pledges"
+  },
+  {
+    "name": "Race to Zero",
+    "domain": "climateaction.unfccc.int",
+    "url": "https://climateaction.unfccc.int/",
+    "description": "Participant pledges/actions",
+    "category": "UN-backed campaigns"
+  },
+  {
+    "name": "Race to Resilience",
+    "domain": "climateaction.unfccc.int",
+    "url": "https://climateaction.unfccc.int/",
+    "description": "Participant pledges",
+    "category": "UN-backed campaigns"
+  },
+  {
+    "name": "RE100",
+    "domain": "there100.org",
+    "url": "https://www.there100.org/re100-members",
+    "description": "Member companies + renewable commitments",
+    "category": "UN-backed campaigns"
+  },
+  {
+    "name": "EV100 / EV100+",
+    "domain": "theclimategroup.org",
+    "url": "https://www.theclimategroup.org/our-members",
+    "description": "Member companies + EV commitments",
+    "category": "UN-backed campaigns"
+  },
+  {
+    "name": "EP100 (Smart Energy Coalition)",
+    "domain": "theclimategroup.org",
+    "url": "https://www.theclimategroup.org/ep100-members",
+    "description": "Member companies + efficiency commitments",
+    "category": "UN-backed campaigns"
+  },
+  {
+    "name": "UN WEPs",
+    "domain": "weps.org",
+    "url": "https://www.weps.org/companies",
+    "description": "Women's Empowerment Principles signatories",
+    "category": "UN-backed campaigns"
+  },
+  {
+    "name": "EITI",
+    "domain": "eiti.org",
+    "url": "https://eiti.org/countries",
+    "description": "Country/company extractive disclosures",
+    "category": "Sector-specific & certification registries"
+  },
+  {
+    "name": "ICMM member reports",
+    "domain": "icmm.com",
+    "url": "https://www.icmm.com/en-gb/research/health-safety",
+    "description": "Member performance/benchmarking reports",
+    "category": "Sector-specific & certification registries"
+  },
+  {
+    "name": "RSPO ACOP / cert search",
+    "domain": "rspo.org",
+    "url": "https://www.rspo.org/members/acop/search/87",
+    "description": "Member ACOP self-reports; certified growers/SC holders",
+    "category": "Sector-specific & certification registries"
+  },
+  {
+    "name": "FSC certificate search",
+    "domain": "search.fsc.org",
+    "url": "https://search.fsc.org/en/",
+    "description": "Certified FM/CoC holders Fsc",
+    "category": "Sector-specific & certification registries"
+  },
+  {
+    "name": "PEFC find-certified",
+    "domain": "pefc.org",
+    "url": "https://www.pefc.org/find-certified",
+    "description": "Certified companies/forests",
+    "category": "Sector-specific & certification registries"
+  },
+  {
+    "name": "RTRS (soy)",
+    "domain": "responsiblesoy.org",
+    "url": "https://responsiblesoy.org/members?lang=en",
+    "description": "Members + member progress reports",
+    "category": "Sector-specific & certification registries"
+  },
+  {
+    "name": "Bonsucro (sugarcane)",
+    "domain": "bonsucro.com",
+    "url": "https://bonsucro.com/certified-members/",
+    "description": "Certificate holders (list + map)",
+    "category": "Sector-specific & certification registries"
+  },
+  {
+    "name": "RSB (biomaterials)",
+    "domain": "rsb.org",
+    "url": "https://rsb.org/ufaq-category/certification/",
+    "description": "Per-operator public summaries + certificates SCS Global Services",
+    "category": "Sector-specific & certification registries"
+  },
+  {
+    "name": "Fairtrade / FLOCERT",
+    "domain": "flocert.net",
+    "url": "https://www.flocert.net/fairtrade-customer-search/",
+    "description": "Certified producers/traders verification",
+    "category": "Sector-specific & certification registries"
+  },
+  {
+    "name": "Rainforest Alliance",
+    "domain": "knowledge.rainforest-alliance.org",
+    "url": "https://knowledge.rainforest-alliance.org/docs/list-of-certificate-holders",
+    "description": "Certificate holders DB",
+    "category": "Sector-specific & certification registries"
+  },
+  {
+    "name": "MSC",
+    "domain": "fisheries.msc.org",
+    "url": "https://fisheries.msc.org/en/fisheries/",
+    "description": "Certified fisheries/CoC",
+    "category": "Sector-specific & certification registries"
+  },
+  {
+    "name": "ASC",
+    "domain": "asc-aqua.org",
+    "url": "https://asc-aqua.org/find-a-farm/",
+    "description": "Certified aquaculture farms",
+    "category": "Sector-specific & certification registries"
+  },
+  {
+    "name": "GoodWeave",
+    "domain": "goodweave.org",
+    "url": "https://goodweave.org/for-businesses/importers/",
+    "description": "Licensed importers",
+    "category": "Sector-specific & certification registries"
+  },
+  {
+    "name": "IRMA",
+    "domain": "responsiblemining.net",
+    "url": "https://responsiblemining.net/independent-assessment/",
+    "description": "Mine audit reports",
+    "category": "Sector-specific & certification registries"
+  },
+  {
+    "name": "ASI elementAL",
+    "domain": "aluminium-stewardship.org",
+    "url": "https://aluminium-stewardship.org/asi-certification/elemental-public-dashboard",
+    "description": "Certification data dashboard",
+    "category": "Sector-specific & certification registries"
+  },
+  {
+    "name": "Responsible Jewellery Council",
+    "domain": "responsiblejewellery.com",
+    "url": "https://www.responsiblejewellery.com/membership/",
+    "description": "Member directory + cert status (~2,000 members)",
+    "category": "Sector-specific & certification registries"
+  },
+  {
+    "name": "OECD NCP final statements",
+    "domain": "oecd.org",
+    "url": "https://www.oecd.org/en/networks/national-contact-points-for-responsible-business-conduct/database.html",
+    "description": "NCP specific instances/final statements (700+ cases)",
+    "category": "Sector-specific & certification registries"
+  },
+  {
+    "name": "UNGP Reporting Framework",
+    "domain": "ungpreporting.org",
+    "url": "https://www.ungpreporting.org/reporters/",
+    "description": "Companies disclosing per UNGP RF",
+    "category": "Sector-specific & certification registries"
+  },
+  {
+    "name": "Disability:IN DEI",
+    "domain": "disabilityin.org",
+    "url": "https://disabilityin.org/what-we-do/disability-index/",
+    "description": "Top-scoring companies list",
+    "category": "Sector-specific & certification registries"
+  },
+  {
+    "name": "HRC CEI",
+    "domain": "hrc.org",
+    "url": "https://www.hrc.org/resources/employers",
+    "description": "Rated employers + CEI scores",
+    "category": "Sector-specific & certification registries"
+  },
+  {
+    "name": "B Corp directory",
+    "domain": "bcorporation.net",
+    "url": "https://www.bcorporation.net/en-us/find-a-b-corp/",
+    "description": "Certified B Corps + impact scores B LabB Lab",
+    "category": "Certification & verified-status registries"
+  },
+  {
+    "name": "IAF CertSearch",
+    "domain": "iafcertsearch.org",
+    "url": "https://www.iafcertsearch.org/",
+    "description": "Accredited management-system certificates (~400k)",
+    "category": "Certification & verified-status registries"
+  },
+  {
+    "name": "LEED",
+    "domain": "usgbc.org",
+    "url": "https://www.usgbc.org/projects",
+    "description": "LEED-certified projects",
+    "category": "Certification & verified-status registries"
+  },
+  {
+    "name": "BREEAM",
+    "domain": "tools.breeam.com",
+    "url": "https://tools.breeam.com/projects/explore/buildings.jsp",
+    "description": "Certified BREEAM assessments Breeam",
+    "category": "Certification & verified-status registries"
+  },
+  {
+    "name": "WELL",
+    "domain": "account.wellcertified.com",
+    "url": "https://account.wellcertified.com/directories/projects",
+    "description": "WELL projects directory",
+    "category": "Certification & verified-status registries"
+  },
+  {
+    "name": "DGNB",
+    "domain": "dgnb.de",
+    "url": "https://www.dgnb.de/en/certification/dgnb-certified-projects",
+    "description": "DGNB-certified projects",
+    "category": "Certification & verified-status registries"
+  },
+  {
+    "name": "ResponsibleSteel",
+    "domain": "responsiblesteel.org",
+    "url": "https://www.responsiblesteel.org/issued-certificates-and-ongoing-audits",
+    "description": "Certified steel sites + ongoing audits",
+    "category": "Certification & verified-status registries"
+  },
+  {
+    "name": "Better Cotton (BCI)",
+    "domain": "bettercotton.org",
+    "url": "https://bettercotton.org/where-is-better-cotton-grown/find-members/",
+    "description": "Member list",
+    "category": "Certification & verified-status registries"
+  },
+  {
+    "name": "Fair Labor Association",
+    "domain": "fairlabor.org",
+    "url": "https://www.fairlabor.org/transparency/assessments",
+    "description": "Accredited companies + assessment reports/CAPs",
+    "category": "Certification & verified-status registries"
+  },
+  {
+    "name": "BRIS (EU interconnection)",
+    "domain": "e-justice.europa.eu",
+    "url": "https://e-justice.europa.eu/489/EN/business_registers__search_for_a_company_in_the_eu",
+    "description": "EU-wide company register search",
+    "category": "National companies registers (statutory accounts)"
+  },
+  {
+    "name": "Handelsregister (Germany)",
+    "domain": "handelsregister.de",
+    "url": "https://www.handelsregister.de/",
+    "description": "German company statutory filings",
+    "category": "National companies registers (statutory accounts)"
+  },
+  {
+    "name": "data.inpi.fr / RNE (France)",
+    "domain": "data.inpi.fr",
+    "url": "https://data.inpi.fr/",
+    "description": "French company accounts/acts",
+    "category": "National companies registers (statutory accounts)"
+  },
+  {
+    "name": "KBO/BCE (Belgium)",
+    "domain": "kbopub.economie.fgov.be",
+    "url": "https://kbopub.economie.fgov.be/kbopub/zoeknummerform.html",
+    "description": "Belgian company register",
+    "category": "National companies registers (statutory accounts)"
+  },
+  {
+    "name": "KvK (Netherlands)",
+    "domain": "kvk.nl",
+    "url": "https://www.kvk.nl/zoeken/",
+    "description": "Dutch company register",
+    "category": "National companies registers (statutory accounts)"
+  },
+  {
+    "name": "Registro Mercantil (Spain)",
+    "domain": "registradores.org",
+    "url": "https://www.registradores.org/",
+    "description": "Spanish company accounts",
+    "category": "National companies registers (statutory accounts)"
+  },
+  {
+    "name": "Registro Imprese (Italy)",
+    "domain": "registroimprese.it",
+    "url": "https://www.registroimprese.it/",
+    "description": "Italian company register",
+    "category": "National companies registers (statutory accounts)"
+  },
+  {
+    "name": "Bolagsverket (Sweden)",
+    "domain": "bolagsverket.se",
+    "url": "https://bolagsverket.se/",
+    "description": "Swedish company filings",
+    "category": "National companies registers (statutory accounts)"
+  },
+  {
+    "name": "Erhvervsstyrelsen / CVR (Denmark)",
+    "domain": "datacvr.virk.dk",
+    "url": "https://datacvr.virk.dk/",
+    "description": "Danish company register + accounts",
+    "category": "National companies registers (statutory accounts)"
+  },
+  {
+    "name": "YTJ / PRH (Finland)",
+    "domain": "tietopalvelu.ytj.fi",
+    "url": "https://tietopalvelu.ytj.fi/",
+    "description": "Finnish company register",
+    "category": "National companies registers (statutory accounts)"
+  },
+  {
+    "name": "Br\u00f8nn\u00f8ysundregistrene (Norway)",
+    "domain": "brreg.no",
+    "url": "https://www.brreg.no/",
+    "description": "Norwegian company register + accounts",
+    "category": "National companies registers (statutory accounts)"
+  },
+  {
+    "name": "CRO (Ireland)",
+    "domain": "core.cro.ie",
+    "url": "https://core.cro.ie/",
+    "description": "Irish company statutory filings",
+    "category": "National companies registers (statutory accounts)"
+  },
+  {
+    "name": "Zefix (Switzerland)",
+    "domain": "zefix.ch",
+    "url": "https://www.zefix.ch/en/search",
+    "description": "Swiss commercial register",
+    "category": "National companies registers (statutory accounts)"
+  },
+  {
+    "name": "MCA21 (India)",
+    "domain": "mca.gov.in",
+    "url": "https://www.mca.gov.in/content/mca/global/en/mca/master-data/MDS.html",
+    "description": "Indian company filings",
+    "category": "National companies registers (statutory accounts)"
+  },
+  {
+    "name": "NEIPS / GSXT (China)",
+    "domain": "gsxt.gov.cn",
+    "url": "https://www.gsxt.gov.cn/",
+    "description": "Chinese enterprise credit/registration info",
+    "category": "National companies registers (statutory accounts)"
+  }
+]
