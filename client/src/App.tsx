@@ -10,6 +10,7 @@ import SettingsPage from "./pages/SettingsPage";
 import DiagnosticsPage from "./pages/DiagnosticsPage";
 import CompanyListsPage from "./pages/CompanyListsPage";
 import ResultsPage from "./pages/ResultsPage";
+import GuidePage from "./pages/GuidePage";
 
 function App() {
   const [authenticated, setAuthenticated] = useState<boolean | null>(null);
@@ -47,6 +48,7 @@ function App() {
           <Route path="/diagnostics" element={<DiagnosticsPage />} />
           <Route path="/company-lists" element={<CompanyListsPage />} />
           <Route path="/results" element={<ResultsPage />} />
+          <Route path="/guide" element={<GuidePage />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </Layout>
